@@ -51,19 +51,15 @@ data/*.csv
 # Config secrets
 settings/local.yaml
 settings/*.local.yaml
-
 # HuggingFace cache
 .cache/
 huggingface/
 datasets/
-
 # PyTorch / OCR weights
 *.pt
 *.bin
-
 # coverage
 .coverage
 htmlcov/
-
 # pytest
 .pytest_cache/
