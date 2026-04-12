@@ -146,7 +146,7 @@ python main.py compare --hf Adilbai/kz-gov-complaints-data-kz-ru
 
 ### Команда `predict` — классификация документа
 
-Нужен уже обученный файл **`.joblib`**. Текст задаётся через **`--text`** или **`--file`** (взаимоисключающие).
+Нужен уже обученный файл модели **`.joblib`**. Текст задаётся через **`--text`** или **`--file`** (взаимоисключающие).
 
 ```bash
 python main.py predict --model models/pipeline_logreg.joblib --text "Произвольный текст документа"
@@ -177,7 +177,7 @@ python main.py predict --model models/pipeline_logreg.joblib --text "..." --json
 ## Формат данных для обучения из папок
 
 ```
-корень/
+root/
   класс_1/
     документ1.txt
     документ2.pdf
@@ -212,9 +212,3 @@ python main.py predict -h
 См. полный список в **`requirements.txt`**: **numpy**, **pandas**, **scikit-learn**, **joblib**, **matplotlib**, **pymorphy2**, **nltk**, **python-docx**, **pymupdf**, **striprtf**, **pytesseract**, **Pillow**, **PyYAML**, опционально **datasets**.
 
 ---
-
-## Ограничения
-
-- Старый формат **`.doc`** (Word 97–2003) не поддерживается — сохраните как **`.docx`**.
-- Качество OCR сканов зависит от Tesseract, разрешения и качества скана.
-- Для стратифицированного `train_test_split` нужно достаточно примеров на класс; при очень малом корпусе возможны ошибки разбиения.
