@@ -225,7 +225,7 @@ def cmd_predict(args: argparse.Namespace) -> None:
 
 def cmd_run(args: argparse.Namespace) -> None:
     """
-    Быстрый старт без длинных флагов: обучение на папке из config (по умолчанию data/corpus_txt).
+    тестове обучение на собственных текстах: обучение на папке из config (по умолчанию data/corpus_txt).
 
     Сценарий диплома: классы — типы документов или темы обращений; каждый документ — отдельный файл.
     """
