@@ -7,3 +7,24 @@
 2026-04-12 22:20:53 INFO data.document_text: Документ прочитан: файл=C:\Users\kdubi\Downloads\RAG_Критерии оценки проекта.docx формат=.docx символов=6577
 2026-04-12 22:20:53 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
 2026-04-12 22:20:53 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
+2026-04-12 23:22:50 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 23:22:51 INFO data.document_text: Документ прочитан: файл=C:\Users\kdubi\Downloads\RAG_Критерии оценки проекта.docx формат=.docx символов=6577
+2026-04-12 23:22:51 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 23:22:51 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
+2026-04-12 23:23:15 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 23:23:15 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 23:23:15 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
+2026-04-12 23:26:39 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 23:26:40 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 23:26:40 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
+2026-04-12 23:27:35 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 23:27:36 INFO datasets: PyTorch version 2.4.1 available.
+2026-04-12 23:27:41 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 23:27:41 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
+2026-04-12 23:27:54 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 23:27:55 INFO datasets: PyTorch version 2.4.1 available.
+2026-04-12 23:27:59 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 23:27:59 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
+2026-04-12 23:28:18 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 23:28:18 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 23:28:18 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
