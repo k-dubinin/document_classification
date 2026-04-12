@@ -1,0 +1,9 @@
+2026-04-12 22:15:54 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 22:15:55 INFO data.document_text: Документ прочитан: файл=data/corpus_txt/политика/документ_01.txt формат=.txt символов=104
+2026-04-12 22:15:56 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 22:15:56 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345
+2026-04-12 22:15:56 INFO prediction.predictor: Классификация: модель с predict_proba, класс=политика, топ_вероятность=0.6278
+2026-04-12 22:20:52 INFO settings.loader: Загружен конфиг: C:\Users\kdubi\OneDrive\Документы\document_classification\settings\default.yaml
+2026-04-12 22:20:53 INFO data.document_text: Документ прочитан: файл=C:\Users\kdubi\Downloads\RAG_Критерии оценки проекта.docx формат=.docx символов=6577
+2026-04-12 22:20:53 INFO pymorphy2.opencorpora_dict.wrapper: Loading dictionaries from C:\Users\kdubi\AppData\Roaming\Python\Python38\site-packages\pymorphy2_dicts_ru\data
+2026-04-12 22:20:53 INFO pymorphy2.opencorpora_dict.wrapper: format: 2.4, revision: 417127, updated: 2020-10-11T15:05:51.070345

@@ -1,0 +1,40 @@
+# Настройки приложения (YAML). Копируйте и меняйте значения без правки Python-кода.
+# Другой файл: переменная APP_CONFIG=путь/к/файлу.yaml или: python main.py --config путь.yaml train ...
+
+# --- Обучение и векторизация (имена как в training/config.py) ---
+TEST_SIZE: 0.2
+RANDOM_STATE: 42
+CSV_TEXT_COLUMN: text
+CSV_LABEL_COLUMN: label
+QUICK_START_DATA_DIR: data/corpus_txt
+QUICK_START_MODEL: logreg
+DEFAULT_MODELS_DIR: models
+
+TFIDF_MAX_FEATURES: 10000
+TFIDF_MIN_DF: 2
+TFIDF_MAX_DF: 0.95
+TFIDF_NGRAM_RANGE: [1, 2]
+TFIDF_NORM: l2
+TFIDF_SUBLINEAR_TF: true
+
+LR_C: 1.0
+LR_MAX_ITER: 2000
+LR_SOLVER: lbfgs
+LR_CLASS_WEIGHT: null
+
+NB_ALPHA: 1.0
+SVM_C: 1.0
+SVM_MAX_ITER: 2000
+
+# --- Пороги OCR и PDF (используются в data/document_text.py) ---
+ocr:
+  PDF_TOTAL_TEXT_MIN_FOR_TEXT_ONLY: 120
+  PDF_PAGE_TEXT_MIN_BEFORE_OCR: 45
+  PDF_OCR_MATRIX_SCALE: 2.0
+  TESSERACT_LANG: rus+eng
+
+# --- Логирование ---
+logging:
+  level: INFO
+  # Путь относительно корня проекта; для только консоли укажите: null
+  file: logs/classification.log

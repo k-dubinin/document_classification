@@ -2,7 +2,7 @@
 Загрузка документов для обучения классификатора.
 
 Основной сценарий: каталог с подпапками — имя подпапки = метка класса,
-внутри — файлы документов (.txt, .docx, .pdf), один файл = один документ.
+внутри — файлы документов (см. document_text.supported_document_extensions), один файл = один документ.
 
 Извлечение текста из Word/PDF — модуль document_text.
 """
@@ -18,14 +18,15 @@ from .document_text import (
     extract_text_from_docx,
     extract_text_from_pdf,
     read_text_from_document,
+    supported_document_extensions,
 )
 
 # --- Параметры чтения текстовых файлов (вынесены в переменные) ---
 # Кодировка при чтении .txt
 TXT_FILE_ENCODING = "utf-8"
 
-# Расширения файлов при обходе папок классов (обучение из каталога)
-SUPPORTED_DOCUMENT_EXTENSIONS = (".txt", ".docx", ".pdf")
+# Расширения файлов при обходе папок классов (синхронно с document_text)
+SUPPORTED_DOCUMENT_EXTENSIONS = supported_document_extensions()
 
 
 def read_txt_document(file_path: str, encoding: str = TXT_FILE_ENCODING) -> str:
