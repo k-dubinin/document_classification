@@ -51,7 +51,7 @@ from evaluation.comparison import print_metrics_comparison_table, rows_for_compa
 from evaluation.evaluate import evaluate_and_report
 from data.document_text import read_text_from_document
 from preprocessing.text_preprocessor import ensure_nltk_stopwords_downloaded
-from prediction.predictor import predict_from_file, predict_with_details
+from prediction.predictor import predict_with_details
 from training import config
 from training.persistence import save_model_bundle
 from training.train import (
@@ -62,6 +62,29 @@ from training.train import (
     train_from_document_folders,
     train_from_huggingface,
 )
+
+
+def _print_score_for_predicted_label(details: dict) -> None:
+    """Одна строка: вероятность или оценка SVM для предсказанного класса."""
+    label = details["label"]
+    probs = details.get("probabilities")
+    if probs:
+        p = probs.get(label)
+        if p is None:
+            p = probs.get(str(label))
+        if p is not None:
+            print("Вероятность предсказанного класса: %.4f" % float(p))
+        return
+    scores = details.get("decision_scores")
+    if scores:
+        s = scores.get(label)
+        if s is None:
+            s = scores.get(str(label))
+        if s is not None:
+            print(
+                "Оценка decision_function для этого класса: %.4f "
+                "(для SVM это не вероятность)" % float(s)
+            )
 
 
 def _model_output_path_and_title(model_kind: str) -> Tuple[str, str]:
@@ -202,6 +225,7 @@ def cmd_predict(args: argparse.Namespace) -> None:
             print(json.dumps(details, ensure_ascii=False, indent=2))
         if args.probs and not args.json:
             print("Предсказанный класс:", details["label"])
+            _print_score_for_predicted_label(details)
             if details.get("probability_top"):
                 print("Вероятности по классам (топ-%d):" % args.top_k)
                 for item in details["probability_top"]:
@@ -219,13 +243,14 @@ def cmd_predict(args: argparse.Namespace) -> None:
                 print("(Расширенные оценки для этой модели недоступны.)")
         return
 
-    label, _pipe, _prep = predict_from_file(text, args.model)
-    print("Предсказанный класс:", label)
+    details = predict_with_details(text, args.model, top_k=1)
+    print("Предсказанный класс:", details["label"])
+    _print_score_for_predicted_label(details)
 
 
 def cmd_run(args: argparse.Namespace) -> None:
     """
-    тестове обучение на собственных текстах: обучение на папке из config (по умолчанию data/corpus_txt).
+    Быстрое обучение на папке из config (по умолчанию data/corpus_txt).
 
     Сценарий диплома: классы — типы документов или темы обращений; каждый документ — отдельный файл.
     """

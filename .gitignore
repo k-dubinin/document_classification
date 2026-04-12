@@ -27,39 +27,41 @@ dist/
 *.egg-info/
 .eggs/
 
-# Logs
+# Logs (см. settings/default.yaml — логи приложения)
 *.log
 logs/
 
-
-# Models (не коммитим обученные модели)
+# Обученные модели в models/ (метрики .json / .png можно коммитить при необходимости)
 models/*.joblib
 models/*.pkl
 
-# Large datasets
-data/corpus_txt/
+# Большие/частные данные (примеры в data/ и sample_train.csv — в репозитории)
+data/private/
 data/raw/
 data/tmp/
-data/*.csv
 
-# OCR temporary files
+# Черновики сканов/картинок вне models (матрицы ошибок в models/*.png можно коммитить)
+temp_images/
 *.png
+!models/*.png
 *.jpg
 *.jpeg
 *.tiff
 
-# Config secrets
+# Локальные переопределения настроек
 settings/local.yaml
 settings/*.local.yaml
-# HuggingFace cache
+
+# Hugging Face / кэши загрузок
 .cache/
 huggingface/
 datasets/
-# PyTorch / OCR weights
+
+# PyTorch / тяжёлые веса
 *.pt
 *.bin
-# coverage
+
+# Тесты и покрытие
 .coverage
 htmlcov/
-# pytest
 .pytest_cache/

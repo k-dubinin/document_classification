@@ -7,7 +7,7 @@
   3) settings/default.yaml относительно корня проекта.
 
 Секции:
-  - корень файла: имена переменных как в training/config.py (TEST_SIZE, TFIDF_*, …);
+  -ROOt: имена переменных как в training/config.py (TEST_SIZE, TFIDF_*, …);
   - ocr: пороги и параметры извлечения PDF (см. data.document_text);
   - logging: level, file.
 """
@@ -18,10 +18,13 @@ import json
 import logging
 import os
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 _FLAT: Dict[str, Any] = {}
 _LOAD_PATH: Optional[str] = None
+
+# Если в конфиге logging.file не задан или null — пишем в этот файл
+DEFAULT_LOG_FILE_RELATIVE = "logs/classification.log"
 
 
 def peek_config_path_from_argv() -> Optional[str]:
@@ -134,20 +137,20 @@ def _setup_logging(project_root: str, flat: Dict[str, Any]) -> None:
     level_name = str(raw_level if raw_level is not None else "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
     file_rel = flat.get("logging.file")
+    if file_rel is None or str(file_rel).strip() == "":
+        file_rel = DEFAULT_LOG_FILE_RELATIVE
+
     fmt = "%(asctime)s %(levelname)s %(name)s: %(message)s"
     datefmt = "%Y-%m-%d %H:%M:%S"
 
-    handlers: List[logging.Handler] = [logging.StreamHandler()]
-    if file_rel:
-        log_path = os.path.join(project_root, str(file_rel))
-        log_dir = os.path.dirname(log_path)
-        if log_dir:
-            os.makedirs(log_dir, exist_ok=True)
-        handlers.append(logging.FileHandler(log_path, encoding="utf-8"))
+    log_path = os.path.join(project_root, str(file_rel))
+    log_dir = os.path.dirname(log_path)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
 
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(level)
-    for h in handlers:
-        h.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
-        root.addHandler(h)
+    fh = logging.FileHandler(log_path, encoding="utf-8")
+    fh.setFormatter(logging.Formatter(fmt, datefmt=datefmt))
+    root.addHandler(fh)

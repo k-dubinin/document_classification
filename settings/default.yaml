@@ -36,5 +36,5 @@ ocr:
 # --- Логирование ---
 logging:
   level: INFO
-  # Путь относительно корня проекта; для только консоли укажите: null
+  # Путь относительно корня проекта; пусто или null — logs/classification.log
   file: logs/classification.log
