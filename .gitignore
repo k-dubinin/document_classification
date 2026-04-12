@@ -1,0 +1,69 @@
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.env.*
+.venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Logs
+*.log
+logs/
+
+
+# Models (не коммитим обученные модели)
+models/*.joblib
+models/*.pkl
+
+# Large datasets
+data/corpus_txt/
+data/raw/
+data/tmp/
+data/*.csv
+
+# OCR temporary files
+*.png
+*.jpg
+*.jpeg
+*.tiff
+
+# Config secrets
+settings/local.yaml
+settings/*.local.yaml
+
+# HuggingFace cache
+.cache/
+huggingface/
+datasets/
+
+# PyTorch / OCR weights
+*.pt
+*.bin
+
+# coverage
+.coverage
+htmlcov/
+
+# pytest
+.pytest_cache/
