@@ -23,11 +23,28 @@ pip install -r requirements.txt
 
 ---
 
+## UI
+
+Локальный веб‑интерфейс на **Streamlit**.
+
+Запуск из корня проекта:
+
+```bash
+python -m streamlit run ui/app.py
+```
+
+В UI есть вкладки:
+- **Классификация**: загрузка файла (`.txt`, `.docx`, `.pdf`, …) или вставка текста → класс + вероятности/оценки.
+- **Обучение**: обучение модели по папке/CSV/Hugging Face + сохранение `.joblib` и отчётов.
+
+---
+
 ## Структура проекта
 
 | Каталог / файл | Назначение |
 |----------------|------------|
 | `main.py` | Точка входа, CLI |
+| `ui/app.py` | UI (Streamlit) |
 | `settings/` | `default.yaml` и загрузчик YAML/JSON |
 | `data/` | Загрузка корпуса, извлечение текста из файлов (`document_text.py`, `data_loader.py`, `hf_loader.py`) |
 | `preprocessing/` | Токенизация, стоп-слова, **pymorphy2** |

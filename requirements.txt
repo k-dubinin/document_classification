@@ -21,5 +21,8 @@ Pillow>=10.0.0
 # Конфигурация YAML (settings/default.yaml)
 PyYAML>=6.0.0
 
+# UI
+streamlit>=1.33.0
+
 # Опционально: загрузка обучающих данных с Hugging Face (обращения, размеченные корпуса)
 datasets>=2.14.0

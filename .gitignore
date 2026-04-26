@@ -65,3 +65,6 @@ datasets/
 .coverage
 htmlcov/
 .pytest_cache/
+
+# Выходные данные
+output/
