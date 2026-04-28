@@ -15,12 +15,40 @@ from __future__ import annotations
 import os
 import shutil
 import csv
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 
 from data.document_text import read_text_from_document, supported_document_extensions
 from prediction.predictor import predict_with_details
+
+logger = logging.getLogger(__name__)
+BATCH_LOG_FILENAME = "batch_classification.log"
+
+
+def _ensure_batch_file_logger() -> None:
+    """
+    файл логов пакетной классификации: logs/batch_classification.log
+    """
+    project_root = Path(__file__).resolve().parents[1]
+    logs_dir = project_root / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    batch_log_path = logs_dir / BATCH_LOG_FILENAME
+
+    for h in logger.handlers:
+        if isinstance(h, logging.FileHandler):
+            try:
+                if Path(h.baseFilename).resolve() == batch_log_path.resolve():
+                    return
+            except Exception:
+                continue
+
+    fh = logging.FileHandler(str(batch_log_path), encoding="utf-8")
+    fh.setLevel(logging.INFO)
+    fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    logger.addHandler(fh)
+    logger.setLevel(logging.INFO)
 
 
 @dataclass
@@ -99,10 +127,26 @@ def classify_directory(
 
     Возвращает итератор результатов по каждому файлу (для отображения прогресса в UI).
     """
+    _ensure_batch_file_logger()
     files = iter_document_paths(input_dir, recursive=recursive)
+    logger.info(
+        "Batch classification started: model=%s input_dir=%s output_dir=%s recursive=%s files=%d threshold=%.2f",
+        model_path,
+        input_dir,
+        output_dir,
+        recursive,
+        len(files),
+        float(manual_review_probability_threshold),
+    )
 
     out_root = Path(output_dir)
     out_root.mkdir(parents=True, exist_ok=True)
+
+    total = len(files)
+    processed = 0
+    success = 0
+    manual_review = 0
+    errors = 0
 
     for file_path in files:
         try:
@@ -136,6 +180,20 @@ def classify_directory(
             class_dir.mkdir(parents=True, exist_ok=True)
             dst = _unique_destination(class_dir / Path(file_path).name)
             shutil.copy2(file_path, dst)
+            processed += 1
+            success += 1
+            if manual_review_required == "yes":
+                manual_review += 1
+            logger.info(
+                "Batch file processed: file=%s class=%s probability=%s score=%s manual_review=%s reason=%s output=%s",
+                file_path,
+                label,
+                "" if prob is None else f"{float(prob):.6f}",
+                "" if score is None else f"{float(score):.6f}",
+                manual_review_required,
+                review_reason or "",
+                str(dst),
+            )
 
             yield BatchItemResult(
                 input_path=file_path,
@@ -148,12 +206,25 @@ def classify_directory(
                 output_path=str(dst),
             )
         except Exception as e:
+            processed += 1
+            errors += 1
+            logger.exception("Batch file failed: file=%s error=%s", file_path, str(e))
             yield BatchItemResult(
                 input_path=file_path,
                 ok=False,
                 manual_review_required="no",
                 error=str(e),
             )
+
+    logger.info(
+        "Batch completed: total=%d processed=%d success=%d manual_review=%d errors=%d output_dir=%s",
+        total,
+        processed,
+        success,
+        manual_review,
+        errors,
+        output_dir,
+    )
 
 
 def write_batch_report_csv(results: List[BatchItemResult], csv_path: str) -> str:

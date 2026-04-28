@@ -191,14 +191,16 @@ with tab_auto:
             value=default_out,
             help="Документы будут КОПИРОВАТЬСЯ в output/<класс>/имя_файла. Выходная папка не очищается.",
         )
-        threshold_percent = st.number_input(
-            "Порог ручной проверки по вероятности (%)",
-            min_value=1,
-            max_value=99,
-            value=20,
-            step=1,
-            help="Применяется только для моделей с вероятностями (Logistic Regression / Naive Bayes). Для SVM не применяется.",
-        )
+        threshold_col, _ = st.columns([1, 3])
+        with threshold_col:
+            threshold_percent = st.number_input(
+                "Порог ручной проверки по вероятности (%)",
+                min_value=1,
+                max_value=60,
+                value=20,
+                step=1,
+                help="Применяется только для моделей с вероятностями (Logistic Regression / Naive Bayes). Для SVM не применяется.",
+            )
 
         st.markdown(
             "**Поддерживаемые форматы**: `.txt`, `.md`, `.docx`, `.pdf`, `.odt`, `.rtf`, `.html`.\n\n"
@@ -229,7 +231,7 @@ with tab_auto:
             err_count = 0
             lines: list[str] = []
             all_results: list[BatchItemResult] = []
-            review_files: list[str] = []
+            review_files: list[tuple[str, str]] = []
 
             for res in classify_directory(
                 auto_model_path,
@@ -246,7 +248,7 @@ with tab_auto:
                     if res.probability is not None:
                         if res.manual_review_required == "yes":
                             review_count += 1
-                            review_files.append(name)
+                            review_files.append((name, str(res.label or "")))
                             lines.append(
                                 f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}% "
                                 f"→ Требуется ручная проверка"
@@ -289,8 +291,8 @@ with tab_auto:
             )
             if review_files:
                 st.warning("Файлы для ручной проверки:")
-                for name in review_files:
-                    st.write(f"- {name}")
+                for name, predicted_class in review_files:
+                    st.write(f"- {name}  |  Предсказанный класс: {predicted_class}")
 
 
 with tab_predict:
