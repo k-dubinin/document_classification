@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import csv
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional
 
 from data.document_text import read_text_from_document, supported_document_extensions
 from prediction.predictor import predict_with_details
@@ -29,6 +30,8 @@ class BatchItemResult:
     label: Optional[str] = None
     probability: Optional[float] = None  # для LR/NB
     score: Optional[float] = None  # для SVM (decision_function; не probability)
+    manual_review_required: str = "no"  # yes / no
+    review_reason: Optional[str] = None
     error: Optional[str] = None
     output_path: Optional[str] = None
 
@@ -88,6 +91,8 @@ def classify_directory(
     *,
     recursive: bool = True,
     top_k: int = 5,
+    manual_review_probability_threshold: float = 0.20,
+    manual_review_folder_name: str = "Требует_проверки",
 ) -> Iterator[BatchItemResult]:
     """
     Классифицирует все документы из input_dir и копирует их в output_dir/<класс>/.
@@ -120,7 +125,14 @@ def classify_directory(
                 if score is None:
                     score = details["decision_scores"].get(str(label))
 
-            class_dir = out_root / _safe_class_dir_name(label)
+            manual_review_required = "no"
+            review_reason = None
+            if prob is not None and float(prob) < float(manual_review_probability_threshold):
+                manual_review_required = "yes"
+                review_reason = "low_confidence_probability"
+                class_dir = out_root / _safe_class_dir_name(manual_review_folder_name)
+            else:
+                class_dir = out_root / _safe_class_dir_name(label)
             class_dir.mkdir(parents=True, exist_ok=True)
             dst = _unique_destination(class_dir / Path(file_path).name)
             shutil.copy2(file_path, dst)
@@ -131,11 +143,54 @@ def classify_directory(
                 label=label,
                 probability=float(prob) if prob is not None else None,
                 score=float(score) if score is not None else None,
+                manual_review_required=manual_review_required,
+                review_reason=review_reason,
                 output_path=str(dst),
             )
         except Exception as e:
             yield BatchItemResult(
                 input_path=file_path,
                 ok=False,
+                manual_review_required="no",
                 error=str(e),
             )
+
+
+def write_batch_report_csv(results: List[BatchItemResult], csv_path: str) -> str:
+    """
+    Сохраняет CSV-отчёт пакетной классификации.
+    """
+    dst = Path(csv_path)
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
+    with dst.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(
+            f,
+            fieldnames=[
+                "input_path",
+                "ok",
+                "predicted_class",
+                "probability",
+                "score",
+                "manual_review_required",
+                "review_reason",
+                "output_path",
+                "error",
+            ],
+        )
+        writer.writeheader()
+        for r in results:
+            writer.writerow(
+                {
+                    "input_path": r.input_path,
+                    "ok": "yes" if r.ok else "no",
+                    "predicted_class": r.label or "",
+                    "probability": "" if r.probability is None else f"{float(r.probability):.6f}",
+                    "score": "" if r.score is None else f"{float(r.score):.6f}",
+                    "manual_review_required": r.manual_review_required,
+                    "review_reason": r.review_reason or "",
+                    "output_path": r.output_path or "",
+                    "error": r.error or "",
+                }
+            )
+    return str(dst)

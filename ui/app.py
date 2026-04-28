@@ -24,7 +24,12 @@ import streamlit as st
 from data.document_text import read_text_from_document
 from evaluation.evaluate import evaluate_and_report
 from prediction.predictor import predict_with_details
-from services.batch_classifier import classify_directory, iter_document_paths
+from services.batch_classifier import (
+    BatchItemResult,
+    classify_directory,
+    iter_document_paths,
+    write_batch_report_csv,
+)
 from training import config
 from training.persistence import save_model_bundle
 from training.train import (
@@ -186,7 +191,14 @@ with tab_auto:
             value=default_out,
             help="Документы будут КОПИРОВАТЬСЯ в output/<класс>/имя_файла. Выходная папка не очищается.",
         )
-        top_k = st.slider("Топ-K (для внутренней оценки вероятностей/оценок)", 1, 10, 5, key="auto_topk")
+        threshold_percent = st.number_input(
+            "Порог ручной проверки по вероятности (%)",
+            min_value=1,
+            max_value=99,
+            value=20,
+            step=1,
+            help="Применяется только для моделей с вероятностями (Logistic Regression / Naive Bayes). Для SVM не применяется.",
+        )
 
         st.markdown(
             "**Поддерживаемые форматы**: `.txt`, `.md`, `.docx`, `.pdf`, `.odt`, `.rtf`, `.html`.\n\n"
@@ -213,25 +225,40 @@ with tab_auto:
 
             processed = 0
             ok_count = 0
+            review_count = 0
             err_count = 0
             lines: list[str] = []
+            all_results: list[BatchItemResult] = []
+            review_files: list[str] = []
 
             for res in classify_directory(
                 auto_model_path,
                 input_dir,
                 output_dir,
                 recursive=recursive,
-                top_k=top_k,
+                top_k=1,
+                manual_review_probability_threshold=float(threshold_percent) / 100.0,
             ):
+                all_results.append(res)
                 processed += 1
                 name = Path(res.input_path).name
                 if res.ok:
-                    ok_count += 1
                     if res.probability is not None:
-                        lines.append(f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}%")
+                        if res.manual_review_required == "yes":
+                            review_count += 1
+                            review_files.append(name)
+                            lines.append(
+                                f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}% "
+                                f"→ Требуется ручная проверка"
+                            )
+                        else:
+                            ok_count += 1
+                            lines.append(f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}%")
                     elif res.score is not None:
+                        ok_count += 1
                         lines.append(f"Файл: {name} → класс: {res.label} → score: {res.score:.4f} (SVM, не вероятность)")
                     else:
+                        ok_count += 1
                         lines.append(f"Файл: {name} → класс: {res.label}")
                 else:
                     err_count += 1
@@ -242,15 +269,28 @@ with tab_auto:
                     progress.progress(min(1.0, processed / total))
                 stats_box.info(
                     f"Обработано: {processed}/{total if total else processed} | "
-                    f"Успешно: {ok_count} | Ошибок: {err_count}"
+                    f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count}"
                 )
                 # показываем последние 200 строк, чтобы не раздувать UI
                 log_box.text("\n".join(lines[-200:]))
 
-            st.success(
-                f"Готово. Успешно: {ok_count}, ошибок: {err_count}. "
-                f"Результат в: {os.path.abspath(output_dir)}"
+            report_path = write_batch_report_csv(
+                all_results,
+                str(Path(output_dir) / "batch_classification_report.csv"),
             )
+            st.success(
+                f"Классификация завершена.\n"
+                f"Всего файлов: {processed}\n"
+                f"Успешно: {ok_count}\n"
+                f"Требуют проверки: {review_count}\n"
+                f"Ошибок: {err_count}\n"
+                f"Результат в: {os.path.abspath(output_dir)}\n"
+                f"CSV-отчёт: {report_path}"
+            )
+            if review_files:
+                st.warning("Файлы для ручной проверки:")
+                for name in review_files:
+                    st.write(f"- {name}")
 
 
 with tab_predict:
