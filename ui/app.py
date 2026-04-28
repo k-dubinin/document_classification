@@ -146,6 +146,8 @@ st.caption("Локально: извлечение текста → предоб
 tab_auto, tab_predict, tab_train, tab_about = st.tabs(
     ["Автоматическая классификация", "Классификация отдельного документа", "Обучение", "О системе"]
 )
+if "batch_result" not in st.session_state:
+    st.session_state.batch_result = None
 
 
 with tab_auto:
@@ -222,7 +224,6 @@ with tab_auto:
         else:
             total = len(files_preview)
             progress = st.progress(0)
-            log_box = st.empty()
             stats_box = st.empty()
 
             processed = 0
@@ -231,7 +232,7 @@ with tab_auto:
             err_count = 0
             lines: list[str] = []
             all_results: list[BatchItemResult] = []
-            review_files: list[tuple[str, str]] = []
+            review_files: list[tuple[str, str, Optional[float]]] = []
 
             for res in classify_directory(
                 auto_model_path,
@@ -248,7 +249,7 @@ with tab_auto:
                     if res.probability is not None:
                         if res.manual_review_required == "yes":
                             review_count += 1
-                            review_files.append((name, str(res.label or "")))
+                            review_files.append((name, str(res.label or ""), float(res.probability)))
                             lines.append(
                                 f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}% "
                                 f"→ Требуется ручная проверка"
@@ -273,26 +274,62 @@ with tab_auto:
                     f"Обработано: {processed}/{total if total else processed} | "
                     f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count}"
                 )
-                # показываем последние 200 строк, чтобы не раздувать UI
-                log_box.text("\n".join(lines[-200:]))
 
             report_path = write_batch_report_csv(
                 all_results,
                 str(Path(output_dir) / "batch_classification_report.csv"),
             )
-            st.success(
-                f"Классификация завершена.\n"
-                f"Всего файлов: {processed}\n"
-                f"Успешно: {ok_count}\n"
-                f"Требуют проверки: {review_count}\n"
-                f"Ошибок: {err_count}\n"
-                f"Результат в: {os.path.abspath(output_dir)}\n"
-                f"CSV-отчёт: {report_path}"
+
+            st.session_state.batch_result = {
+                "processed": processed,
+                "ok_count": ok_count,
+                "review_count": review_count,
+                "err_count": err_count,
+                "threshold_percent": threshold_percent,
+                "output_dir": os.path.abspath(output_dir),
+                "report_path": report_path,
+                "review_files": review_files,
+                "lines": lines,
+            }
+
+    if st.session_state.batch_result:
+        result = st.session_state.batch_result
+
+        st.success(
+            f"Обработано: {result['processed']} | "
+            f"Успешно: {result['ok_count']} | "
+            f"Требуют проверки: {result['review_count']} | "
+            f"Ошибок: {result['err_count']}"
+        )
+
+        with open(result["report_path"], "rb") as f:
+            st.download_button(
+                "Скачать CSV-отчёт",
+                f,
+                file_name="batch_classification_report.csv",
+                mime="text/csv",
+                key="download_csv_report"
             )
-            if review_files:
-                st.warning("Файлы для ручной проверки:")
-                for name, predicted_class in review_files:
-                    st.write(f"- {name}  |  Предсказанный класс: {predicted_class}")
+
+        if result["review_files"]:
+            st.warning("Файлы для ручной проверки:")
+
+            for name, predicted_class, prob in result["review_files"]:
+                st.markdown(
+                    f"📄 **{name}**\n\n"
+                    f"→ Предсказанный класс: **{predicted_class}**\n\n"
+                    f"→ Вероятность: **{prob * 100:.1f}%**\n\n"
+                    f"→ Требуется ручная проверка"
+                )
+
+        with st.expander(
+            "Открыть полностью: список обработанных файлов",
+            expanded=False
+        ):
+            if result["lines"]:
+                st.text("\n".join(result["lines"]))
+            else:
+                st.info("Список пуст.")
 
 
 with tab_predict:
