@@ -206,6 +206,30 @@ python main.py predict --model models/pipeline_logreg.joblib --file докуме
 python main.py predict --model models/pipeline_logreg.joblib --file документ.pdf
 ```
 
+### Команда `batch` — пакетная автоматическая классификация
+
+Позволяет запускать ту же автоматическую классификацию, что доступна в UI, но через командную строку.
+
+```bash
+python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp --output-dir output/classified
+python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp --output-dir output/classified --threshold 25
+python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp --output-dir output/classified --recursive
+```
+
+Аргументы:
+
+| Аргумент | Описание |
+|----------|----------|
+| `--model` | Путь к `.joblib` модели для классификации |
+| `--input-dir` | Входная директория с документами для обработки |
+| `--output-dir` | Директория для копий классифицированных файлов и CSV-отчёта |
+| `--threshold` | Порог вероятности для ручной проверки (в процентах, по умолчанию 20). Применяется только для моделей с вероятностями (Logistic Regression / Naive Bayes) |
+| `--recursive` | Обрабатывать файлы рекурсивно в подпапках |
+
+По результату создаётся CSV-отчёт `batch_classification_report.csv` в указанной выходной директории, а также копии файлов по папкам классов и `Требует_проверки` для результатов с вероятностью классов меньше пороговой.
+
+---
+
 Поддерживаемые расширения файлов: **`.txt`**, **`.md`**, **`.docx`**, **`.pdf`**, **`.odt`**, **`.rtf`**, **`.html`**, **`.htm`**.
 
 Без флагов **`--probs`** и **`--json`** в консоль выводятся **предсказанный класс** и **вероятность этого класса** (для логистической регрессии и наивного байеса) или **оценка decision_function** для этого класса (для SVM; это не вероятность).

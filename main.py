@@ -25,6 +25,9 @@
   python main.py predict --model models/pipeline_logreg.joblib --file документ.pdf
   python main.py predict --model models/pipeline_logreg.joblib --file документ.pdf --probs --top-k 5
   python main.py predict --model models/pipeline_logreg.joblib --text "..." --json
+  python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp --output-dir output/classified
+  python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp --output-dir output/classified --threshold 25
+  python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp --output-dir output/classified --recursive
   python main.py --config settings/my.yaml train --data-dir data/corpus_txt
   Настройки по умолчанию: settings/default.yaml (или APP_CONFIG=путь).
 """
@@ -52,6 +55,11 @@ from evaluation.evaluate import evaluate_and_report
 from data.document_text import read_text_from_document
 from preprocessing.text_preprocessor import ensure_nltk_stopwords_downloaded
 from prediction.predictor import predict_with_details
+from services.batch_classifier import (
+    classify_directory,
+    iter_document_paths,
+    write_batch_report_csv,
+)
 from training import config
 from training.persistence import save_model_bundle
 from training.train import (
@@ -248,6 +256,103 @@ def cmd_predict(args: argparse.Namespace) -> None:
     _print_score_for_predicted_label(details)
 
 
+def cmd_batch(args: argparse.Namespace) -> None:
+    """Пакетная классификация: обработка всех документов из входной директории."""
+    if not os.path.isfile(args.model):
+        print(f"Ошибка: файл модели не найден: {args.model}")
+        raise SystemExit(1)
+
+    if not os.path.isdir(args.input_dir):
+        print(f"Ошибка: входная директория не найдена: {args.input_dir}")
+        raise SystemExit(1)
+
+    # Создание выходной директории
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Получение списка файлов для обработки
+    files_list = list(iter_document_paths(args.input_dir, recursive=args.recursive))
+    total_files = len(files_list)
+
+    if total_files == 0:
+        print(f"Предупреждение: файлов для обработки не найдено в {args.input_dir}")
+        return
+
+    print(f"Обработка {total_files} файлов...")
+    print(f"Модель: {args.model}")
+    print(f"Входная директория: {os.path.abspath(args.input_dir)}")
+    print(f"Выходная директория: {os.path.abspath(args.output_dir)}")
+    print(f"Порог вероятности для ручной проверки: {args.threshold}%")
+    print(f"Рекурсивная обработка подпапок: {args.recursive}")
+    print()
+
+    # Переменные для отслеживания статистики
+    processed = 0
+    ok_count = 0
+    review_count = 0
+    err_count = 0
+    all_results = []
+
+    # Обработка директории
+    for res in classify_directory(
+        args.model,
+        args.input_dir,
+        args.output_dir,
+        recursive=args.recursive,
+        top_k=1,
+        manual_review_probability_threshold=float(args.threshold) / 100.0,
+    ):
+        all_results.append(res)
+        processed += 1
+        name = os.path.basename(res.input_path)
+
+        if res.ok:
+            if res.manual_review_required == "yes":
+                review_count += 1
+                if res.probability is not None:
+                    print(
+                        f"✓ {name} → {res.label} "
+                        f"({res.probability * 100:.1f}%) [ТРЕБУЕТ ПРОВЕРКИ]"
+                    )
+                else:
+                    print(f"✓ {name} → {res.label} [ТРЕБУЕТ ПРОВЕРКИ]")
+            else:
+                ok_count += 1
+                if res.probability is not None:
+                    print(f"✓ {name} → {res.label} ({res.probability * 100:.1f}%)")
+                elif res.score is not None:
+                    print(f"✓ {name} → {res.label} (score: {res.score:.4f})")
+                else:
+                    print(f"✓ {name} → {res.label}")
+        else:
+            err_count += 1
+            print(f"✗ {name} → ОШИБКА: {res.error}")
+
+        # Прогресс каждые 10 файлов или в конце
+        if processed % 10 == 0 or processed == total_files:
+            print(
+                f"  [{processed}/{total_files}] "
+                f"Успешно: {ok_count}, Требуют проверки: {review_count}, Ошибок: {err_count}"
+            )
+
+    # Сохранение отчёта
+    report_path = write_batch_report_csv(
+        all_results,
+        os.path.join(args.output_dir, "batch_classification_report.csv"),
+    )
+
+    # Финальная статистика
+    print()
+    print("=" * 80)
+    print("ИТОГОВЫЙ ОТЧЁТ")
+    print("=" * 80)
+    print(f"Всего обработано: {processed}")
+    print(f"Успешно классифицировано: {ok_count}")
+    print(f"Требуют ручной проверки: {review_count}")
+    print(f"Ошибок при обработке: {err_count}")
+    print(f"Отчёт сохранён: {report_path}")
+    print("=" * 80)
+
+
 def cmd_run(args: argparse.Namespace) -> None:
     """
     Быстрое обучение на папке из config (по умолчанию data/corpus_txt).
@@ -397,6 +502,40 @@ def build_parser() -> argparse.ArgumentParser:
         help="Печать результата одним JSON (с вероятностями или оценками, если модель поддерживает)",
     )
     p_pred.set_defaults(func=cmd_predict)
+
+    p_batch = sub.add_parser(
+        "batch",
+        help="Пакетная классификация: обработка всех документов из входной директории",
+    )
+    p_batch.add_argument(
+        "--model",
+        required=True,
+        help="Путь к .joblib (результат обучения)",
+    )
+    p_batch.add_argument(
+        "--input-dir",
+        required=True,
+        help="Входная директория с документами для обработки",
+    )
+    p_batch.add_argument(
+        "--output-dir",
+        required=True,
+        help="Выходная директория для сохранения классифицированных документов и отчёта",
+    )
+    p_batch.add_argument(
+        "--threshold",
+        type=int,
+        default=20,
+        metavar="PERCENT",
+        help="Порог вероятности для ручной проверки в процентах (1-60, по умолчанию 20). "
+        "Применяется только для моделей с вероятностями (Logistic Regression / Naive Bayes).",
+    )
+    p_batch.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Поиск файлов в подпапках (рекурсивно). По умолчанию — только в корне входной директории.",
+    )
+    p_batch.set_defaults(func=cmd_batch)
 
     return parser
 
