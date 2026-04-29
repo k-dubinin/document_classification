@@ -18,9 +18,11 @@ from __future__ import annotations
 
 import json
 import os
+from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+import plotly.express as px
 import streamlit as st
 
 from data.document_text import read_text_from_document
@@ -236,6 +238,7 @@ with tab_auto:
             lines: list[str] = []
             all_results: list[BatchItemResult] = []
             review_files: list[tuple[str, str, Optional[float]]] = []
+            class_counts: Counter[str] = Counter()
 
             for res in classify_directory(
                 auto_model_path,
@@ -266,8 +269,10 @@ with tab_auto:
                     else:
                         ok_count += 1
                         lines.append(f"Файл: {name} → класс: {res.label}")
+                    class_counts[str(res.label or "Неизвестно")] += 1
                 else:
                     err_count += 1
+                    class_counts["Ошибки"] += 1
                     lines.append(f"Файл: {name} → ошибка: {res.error}")
 
                 # UI обновления
@@ -298,6 +303,7 @@ with tab_auto:
                 "report_path": report_path,
                 "review_files": review_files,
                 "lines": lines,
+                "class_counts": dict(class_counts),
             }
 
     if st.session_state.batch_result:
@@ -309,6 +315,26 @@ with tab_auto:
             f"Требуют проверки: {result['review_count']} | "
             f"Ошибок: {result['err_count']}"
         )
+
+        class_counts = result.get("class_counts", {})
+        if class_counts:
+            fig = px.pie(
+                names=list(class_counts.keys()),
+                values=list(class_counts.values()),
+                hole=0.4,
+                labels={"names": "Класс", "values": "Количество"},
+            )
+            fig.update_traces(
+                textposition="inside",
+                textinfo="label",
+                hovertemplate="%{label}: %{value} (%{percent:.1%})",
+            )
+            fig.update_layout(
+                margin=dict(l=20, r=20, t=20, b=20),
+                showlegend=False,
+            )
+            st.subheader("Распределение по классам")
+            st.plotly_chart(fig, use_container_width=True)
 
         with st.expander(
             "Список обработанных файлов (Открыть полностью): ",
