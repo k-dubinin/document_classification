@@ -218,7 +218,9 @@ with tab_auto:
         files_preview = []
     st.caption(f"Найдено файлов для обработки: {len(files_preview)}")
 
-    if st.button("Запустить автоматическую классификацию", type="primary"):
+    clicked = st.button("Запустить автоматическую классификацию", type="primary")
+    stats_box = st.empty()
+    if clicked:
         if not auto_model_path or not str(auto_model_path).strip():
             st.error("Укажите путь к модели (.joblib).")
         elif not input_dir or not Path(input_dir).is_dir():
@@ -226,7 +228,6 @@ with tab_auto:
         else:
             total = len(files_preview)
             progress = st.progress(0)
-            stats_box = st.empty()
 
             processed = 0
             ok_count = 0
@@ -282,6 +283,11 @@ with tab_auto:
                 str(Path(output_dir) / "batch_classification_report.csv"),
             )
 
+            stats_box.success(
+                f"Обработано: {processed}/{total if total else processed} | "
+                f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count}"
+            )
+
             st.session_state.batch_result = {
                 "processed": processed,
                 "ok_count": ok_count,
@@ -297,7 +303,7 @@ with tab_auto:
     if st.session_state.batch_result:
         result = st.session_state.batch_result
 
-        st.success(
+        stats_box.success(
             f"Обработано: {result['processed']} | "
             f"Успешно: {result['ok_count']} | "
             f"Требуют проверки: {result['review_count']} | "
@@ -330,7 +336,7 @@ with tab_auto:
                     f"📄 **{name}**\n\n"
                     f"→ Предсказанный класс: **{predicted_class}**\n\n"
                     f"→ Вероятность: **{prob * 100:.1f}%**\n\n"
-                    f"→ Требуется ручная проверка"
+                    #f"→ Требуется ручная проверка"
                 )
 
 
