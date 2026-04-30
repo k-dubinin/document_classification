@@ -221,6 +221,7 @@ with tab_auto:
     st.caption(f"Найдено файлов для обработки: {len(files_preview)}")
 
     clicked = st.button("Запустить автоматическую классификацию", type="primary")
+    progress_placeholder = st.empty()
     stats_box = st.empty()
     if clicked:
         if not auto_model_path or not str(auto_model_path).strip():
@@ -229,7 +230,7 @@ with tab_auto:
             st.error("Входная директория не найдена.")
         else:
             total = len(files_preview)
-            progress = st.progress(0)
+            progress = progress_placeholder.progress(0)
 
             processed = 0
             ok_count = 0
@@ -237,7 +238,7 @@ with tab_auto:
             err_count = 0
             lines: list[str] = []
             all_results: list[BatchItemResult] = []
-            review_files: list[tuple[str, str, Optional[float]]] = []
+            processed_items: list[dict[str, str]] = []
             class_counts: Counter[str] = Counter()
 
             for res in classify_directory(
@@ -252,26 +253,46 @@ with tab_auto:
                 processed += 1
                 name = Path(res.input_path).name
                 if res.ok:
-                    if res.probability is not None:
-                        if res.manual_review_required == "yes":
-                            review_count += 1
-                            review_files.append((name, str(res.label or ""), float(res.probability)))
-                            lines.append(
-                                f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}% "
-                                f"→ Требуется ручная проверка"
-                            )
-                        else:
-                            ok_count += 1
-                            lines.append(f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}%")
-                    elif res.score is not None:
-                        ok_count += 1
-                        lines.append(f"Файл: {name} → класс: {res.label} → score: {res.score:.4f} (SVM, не вероятность)")
+                    status = "Успешно"
+                    if res.manual_review_required == "yes":
+                        status = "Требует проверки"
+                        review_count += 1
                     else:
                         ok_count += 1
+                    item = {
+                        "name": name,
+                        "input_path": res.input_path,
+                        "status": status,
+                        "label": str(res.label or ""),
+                        "probability": f"{res.probability * 100:.1f}%" if res.probability is not None else "",
+                        "score": f"{res.score:.4f}" if res.score is not None else "",
+                        "error": "",
+                    }
+                    processed_items.append(item)
+                    if res.manual_review_required == "yes":
+                        lines.append(
+                            f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}% "
+                            f"→ Требуется ручная проверка"
+                        )
+                    elif res.probability is not None:
+                        lines.append(f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}%")
+                    elif res.score is not None:
+                        lines.append(f"Файл: {name} → класс: {res.label} → score: {res.score:.4f} (SVM, не вероятность)")
+                    else:
                         lines.append(f"Файл: {name} → класс: {res.label}")
                     class_counts[str(res.label or "Неизвестно")] += 1
                 else:
                     err_count += 1
+                    item = {
+                        "name": name,
+                        "input_path": res.input_path,
+                        "status": "Ошибка",
+                        "label": "",
+                        "probability": "",
+                        "score": "",
+                        "error": res.error or "",
+                    }
+                    processed_items.append(item)
                     class_counts["Ошибки"] += 1
                     lines.append(f"Файл: {name} → ошибка: {res.error}")
 
@@ -301,9 +322,9 @@ with tab_auto:
                 "threshold_percent": threshold_percent,
                 "output_dir": os.path.abspath(output_dir),
                 "report_path": report_path,
-                "review_files": review_files,
                 "lines": lines,
                 "class_counts": dict(class_counts),
+                "processed_items": processed_items,
             }
 
     if st.session_state.batch_result:
@@ -315,6 +336,42 @@ with tab_auto:
             f"Требуют проверки: {result['review_count']} | "
             f"Ошибок: {result['err_count']}"
         )
+
+        with st.expander(
+            "Список обработанных файлов (Открыть полностью): ",
+            expanded=False
+        ):
+            processed_items = result.get("processed_items", [])
+            if processed_items:
+                st.markdown("**Обработанные файлы:**")
+                for idx, item in enumerate(processed_items[:20]):
+                    input_uri = Path(item["input_path"]).resolve().as_uri()
+                    details = []
+                    if item["label"]:
+                        details.append(f"класс: {item['label']}")
+                    if item["probability"]:
+                        details.append(f"вероятность: {item['probability']}")
+                    if item["score"]:
+                        details.append(f"score: {item['score']}")
+                    if item["error"]:
+                        details.append(f"ошибка: {item['error']}")
+                    detail_text = f" ({', '.join(details)})" if details else ""
+                    cols = st.columns([5, 1])
+                    cols[0].markdown(f"- [{item['name']}]({input_uri}) — **{item['status']}**{detail_text}")
+                    if cols[1].button("Скопировать путь", key=f"copy_path_{idx}"):
+                        st.session_state["batch_copy_path"] = item["input_path"]
+                if len(processed_items) > 20:
+                    st.caption(f"Показаны первые 20 из {len(processed_items)} обработанных файлов.")
+                if st.session_state.get("batch_copy_path"):
+                    st.text_input(
+                        "Путь для копирования",
+                        value=st.session_state["batch_copy_path"],
+                        disabled=True,
+                    )
+            else:
+                st.info("Список пуст.")
+
+        class_counts = result.get("class_counts", {})
 
         class_counts = result.get("class_counts", {})
         if class_counts:
@@ -336,15 +393,6 @@ with tab_auto:
             st.subheader("Распределение по классам")
             st.plotly_chart(fig, use_container_width=True)
 
-        with st.expander(
-            "Список обработанных файлов (Открыть полностью): ",
-            expanded=False
-        ):
-            if result["lines"]:
-                st.text("\n".join(result["lines"]))
-            else:
-                st.info("Список пуст.")
-
         with open(result["report_path"], "rb") as f:
             st.download_button(
                 "Скачать CSV-отчёт",
@@ -354,16 +402,38 @@ with tab_auto:
                 key="download_csv_report"
             )
 
-        if result["review_files"]:
-            st.warning("Файлы для ручной проверки:")
+    st.header("Ручная классификация файлов, требующих проверки")
+    if result:
+        review_items = [item for item in result.get("processed_items", []) if item["status"] == "Требует проверки"]
+        if review_items:
+            selected_file = st.selectbox("Выберите файл для ручной классификации", [item["name"] for item in review_items])
+            selected_item = next(item for item in review_items if item["name"] == selected_file)
 
-            for name, predicted_class, prob in result["review_files"]:
-                st.markdown(
-                    f"📄 **{name}**\n\n"
-                    f"→ Предсказанный класс: **{predicted_class}**\n\n"
-                    f"→ Вероятность: **{prob * 100:.1f}%**\n\n"
-                    #f"→ Требуется ручная проверка"
-                )
+            # Показать содержимое файла
+            try:
+                text = read_text_from_document(selected_item["input_path"])
+                st.text_area("Содержимое файла", text, height=300, disabled=True)
+            except Exception as e:
+                st.error(f"Не удалось загрузить текст файла: {e}")
+
+            # Список доступных классов
+            available_classes = [c for c in result.get("class_counts", {}).keys() if c != "Ошибки"]
+            if available_classes:
+                manual_class = st.selectbox("Выберите правильный класс", available_classes)
+                if st.button("Подтвердить ручную классификацию"):
+                    # Обновить статус в результатах
+                    for item in result["processed_items"]:
+                        if item["input_path"] == selected_item["input_path"]:
+                            item["status"] = "Успешно (ручная)"
+                            item["label"] = manual_class
+                            item["probability"] = ""
+                            break
+                    st.success(f"Класс для файла '{selected_file}' установлен как '{manual_class}'")
+                    st.rerun()
+            else:
+                st.warning("Не удалось определить доступные классы.")
+        else:
+            st.info("Нет файлов, требующих ручной проверки.")
 
 
 with tab_predict:
