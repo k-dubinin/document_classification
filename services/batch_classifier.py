@@ -16,6 +16,7 @@ import os
 import shutil
 import csv
 import logging
+import concurrent.futures
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
@@ -112,6 +113,80 @@ def _unique_destination(dst: Path) -> Path:
         i += 1
 
 
+def _process_single_file(
+    file_path: str,
+    model_path: str,
+    out_root: Path,
+    top_k: int,
+    manual_review_probability_threshold: float,
+    manual_review_folder_name: str,
+) -> BatchItemResult:
+    """
+    Обрабатывает один файл для параллельной классификации.
+    """
+    try:
+        text = read_text_from_document(file_path)
+        if not text or not str(text).strip():
+            raise ValueError("пустой текст (файл пустой или извлечение не удалось)")
+
+        details: Dict = predict_with_details(text, model_path, top_k=top_k)
+        label = str(details.get("label"))
+
+        prob = None
+        if details.get("probabilities"):
+            prob = details["probabilities"].get(label)
+            if prob is None:
+                prob = details["probabilities"].get(str(label))
+
+        score = None
+        if prob is None and details.get("decision_scores"):
+            score = details["decision_scores"].get(label)
+            if score is None:
+                score = details["decision_scores"].get(str(label))
+
+        manual_review_required = "no"
+        review_reason = None
+        if prob is not None and float(prob) < float(manual_review_probability_threshold):
+            manual_review_required = "yes"
+            review_reason = "low_confidence_probability"
+            class_dir = out_root / _safe_class_dir_name(manual_review_folder_name)
+        else:
+            class_dir = out_root / _safe_class_dir_name(label)
+        class_dir.mkdir(parents=True, exist_ok=True)
+        dst = _unique_destination(class_dir / Path(file_path).name)
+        shutil.copy2(file_path, dst)
+
+        logger.info(
+            "Batch file processed: file=%s class=%s probability=%s score=%s manual_review=%s reason=%s output=%s",
+            file_path,
+            label,
+            "" if prob is None else f"{float(prob):.6f}",
+            "" if score is None else f"{float(score):.6f}",
+            manual_review_required,
+            review_reason or "",
+            str(dst),
+        )
+
+        return BatchItemResult(
+            input_path=file_path,
+            ok=True,
+            label=label,
+            probability=float(prob) if prob is not None else None,
+            score=float(score) if score is not None else None,
+            manual_review_required=manual_review_required,
+            review_reason=review_reason,
+            output_path=str(dst),
+        )
+    except Exception as e:
+        logger.exception("Batch file failed: file=%s error=%s", file_path, str(e))
+        return BatchItemResult(
+            input_path=file_path,
+            ok=False,
+            manual_review_required="no",
+            error=str(e),
+        )
+
+
 def classify_directory(
     model_path: str,
     input_dir: str,
@@ -143,86 +218,29 @@ def classify_directory(
     out_root.mkdir(parents=True, exist_ok=True)
 
     total = len(files)
-    processed = 0
-    success = 0
-    manual_review = 0
-    errors = 0
+    max_workers = min(4, os.cpu_count() or 1)  # Ограничим до 4 потоков для IO-bound задач
 
-    for file_path in files:
-        try:
-            text = read_text_from_document(file_path)
-            if not text or not str(text).strip():
-                raise ValueError("пустой текст (файл пустой или извлечение не удалось)")
-
-            details: Dict = predict_with_details(text, model_path, top_k=top_k)
-            label = str(details.get("label"))
-
-            prob = None
-            if details.get("probabilities"):
-                prob = details["probabilities"].get(label)
-                if prob is None:
-                    prob = details["probabilities"].get(str(label))
-
-            score = None
-            if prob is None and details.get("decision_scores"):
-                score = details["decision_scores"].get(label)
-                if score is None:
-                    score = details["decision_scores"].get(str(label))
-
-            manual_review_required = "no"
-            review_reason = None
-            if prob is not None and float(prob) < float(manual_review_probability_threshold):
-                manual_review_required = "yes"
-                review_reason = "low_confidence_probability"
-                class_dir = out_root / _safe_class_dir_name(manual_review_folder_name)
-            else:
-                class_dir = out_root / _safe_class_dir_name(label)
-            class_dir.mkdir(parents=True, exist_ok=True)
-            dst = _unique_destination(class_dir / Path(file_path).name)
-            shutil.copy2(file_path, dst)
-            processed += 1
-            success += 1
-            if manual_review_required == "yes":
-                manual_review += 1
-            logger.info(
-                "Batch file processed: file=%s class=%s probability=%s score=%s manual_review=%s reason=%s output=%s",
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(
+                _process_single_file,
                 file_path,
-                label,
-                "" if prob is None else f"{float(prob):.6f}",
-                "" if score is None else f"{float(score):.6f}",
-                manual_review_required,
-                review_reason or "",
-                str(dst),
+                model_path,
+                out_root,
+                top_k,
+                manual_review_probability_threshold,
+                manual_review_folder_name,
             )
+            for file_path in files
+        ]
 
-            yield BatchItemResult(
-                input_path=file_path,
-                ok=True,
-                label=label,
-                probability=float(prob) if prob is not None else None,
-                score=float(score) if score is not None else None,
-                manual_review_required=manual_review_required,
-                review_reason=review_reason,
-                output_path=str(dst),
-            )
-        except Exception as e:
-            processed += 1
-            errors += 1
-            logger.exception("Batch file failed: file=%s error=%s", file_path, str(e))
-            yield BatchItemResult(
-                input_path=file_path,
-                ok=False,
-                manual_review_required="no",
-                error=str(e),
-            )
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            yield result
 
     logger.info(
-        "Batch completed: total=%d processed=%d success=%d manual_review=%d errors=%d output_dir=%s",
+        "Batch completed: total=%d output_dir=%s",
         total,
-        processed,
-        success,
-        manual_review,
-        errors,
         output_dir,
     )
 
