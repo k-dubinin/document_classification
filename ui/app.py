@@ -434,12 +434,20 @@ with tab_auto:
             # Если модель загрузить не удалось, добавим текущий предсказанный класс для выбранного файла
             if selected_item["label"] and selected_item["label"] not in available_classes:
                 available_classes.append(selected_item["label"])
+            # Добавить вариант для файлов, не подходящих ни под один класс
+            available_classes.append("Не подходит ни под один класс")
             if available_classes:
                 manual_class = st.selectbox("Выберите правильный класс", available_classes)
                 if st.button("Подтвердить ручную классификацию"):
+                    # Определить папку назначения
+                    if manual_class == "Не подходит ни под один класс":
+                        target_class = "Неопределено"
+                    else:
+                        target_class = manual_class
+
                     # Переместить файл в правильную папку
                     output_dir = Path(result["output_dir"])
-                    new_dir = output_dir / manual_class
+                    new_dir = output_dir / target_class
                     new_dir.mkdir(parents=True, exist_ok=True)
                     new_path = new_dir / selected_item["name"]
 
@@ -453,7 +461,7 @@ with tab_auto:
 
                     # Обновить статус в результатах
                     selected_item["status"] = "Успешно (ручная)"
-                    selected_item["label"] = manual_class
+                    selected_item["label"] = target_class
                     selected_item["output_path"] = str(new_path)
                     selected_item["probability"] = ""  # Очистить, так как ручная
 
@@ -466,7 +474,7 @@ with tab_auto:
                             class_counts["Ошибки"] += 1
                     result["class_counts"] = dict(class_counts)
 
-                    st.success(f"Файл '{selected_item['name']}' перемещен в папку '{manual_class}' и классифицирован как '{manual_class}'")
+                    st.success(f"Файл '{selected_item['name']}' перемещен в папку '{target_class}' и классифицирован как '{target_class}'")
                     st.session_state["show_no_files_message"] = True
                     st.rerun()
             else:
@@ -585,8 +593,12 @@ with tab_train:
         }
 
     if st.button("Запустить обучение", type="primary"):
+        progress = st.progress(0)
+        status_text = st.empty()
         with st.spinner("Обучение..."):
             try:
+                status_text.text("Загрузка и подготовка данных...")
+                progress.progress(0.2)
                 if train_params["kind"] == "dir":
                     pipeline, _X_train, _y_train, X_test, y_test, preprocessor = train_from_document_folders(
                         data_root=train_params["data_dir"],
@@ -608,7 +620,12 @@ with tab_train:
                         label_column=train_params["label_col"],
                     )
 
+                status_text.text("Обучение модели...")
+                progress.progress(0.6)
+
                 # Оценка + артефакты
+                status_text.text("Оценка и сохранение...")
+                progress.progress(0.8)
                 title_map = {"logreg": "Logistic Regression", "nb": "Naive Bayes", "svm": "Linear SVM"}
                 payload = evaluate_and_report(
                     pipeline,
@@ -628,13 +645,20 @@ with tab_train:
                 model_file = str(Path(out_dir) / name_map[model_kind])
                 save_model_bundle(pipeline, preprocessor, model_file)
 
+                progress.progress(1.0)
+                status_text.text("Готово!")
+
             except Exception as e:
                 st.error(f"Ошибка обучения: {e}")
+                progress.empty()
+                status_text.empty()
             else:
                 st.success(f"Готово. Модель сохранена: {model_file}")
                 with st.expander("Метрики (JSON payload)", expanded=False):
                     st.json(payload)
                 _render_metrics_files(out_dir)
+                progress.empty()
+                status_text.empty()
 
 
 with tab_about:
