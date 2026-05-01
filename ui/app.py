@@ -347,31 +347,78 @@ with tab_auto:
         ):
             processed_items = result.get("processed_items", [])
             if processed_items:
-                st.markdown("**Обработанные файлы:**")
-                for idx, item in enumerate(processed_items[:20]):
-                    input_uri = Path(item["input_path"]).resolve().as_uri()
-                    details = []
-                    if item["label"]:
-                        details.append(f"класс: {item['label']}")
-                    if item["probability"]:
-                        details.append(f"вероятность: {item['probability']}")
-                    if item["score"]:
-                        details.append(f"score: {item['score']}")
-                    if item["error"]:
-                        details.append(f"ошибка: {item['error']}")
-                    detail_text = f" ({', '.join(details)})" if details else ""
-                    cols = st.columns([5, 1])
-                    cols[0].markdown(f"- [{item['name']}]({input_uri}) — **{item['status']}**{detail_text}")
-                    if cols[1].button("Скопировать путь", key=f"copy_path_{idx}"):
-                        st.session_state["batch_copy_path"] = item["input_path"]
-                if len(processed_items) > 20:
-                    st.caption(f"Показаны первые 20 из {len(processed_items)} обработанных файлов.")
-                if st.session_state.get("batch_copy_path"):
-                    st.text_input(
-                        "Путь для копирования",
-                        value=st.session_state["batch_copy_path"],
-                        disabled=True,
-                    )
+                st.markdown("**Фильтры и поиск:**")
+                
+                # Фильтры по статусу
+                filter_cols = st.columns(4)
+                with filter_cols[0]:
+                    show_success = st.checkbox("✅ Успешные", value=False, key="filter_success")
+                with filter_cols[1]:
+                    show_review = st.checkbox("⚠️  Требуют проверки", value=False, key="filter_review")
+                with filter_cols[2]:
+                    show_errors = st.checkbox("❌ Ошибки", value=False, key="filter_errors")
+                with filter_cols[3]:
+                    search_term = st.text_input("🔍 Поиск по имени/классу", "", key="file_search")
+                
+                # Проверяем, включен ли хотя бы один фильтр
+                any_filter_enabled = show_success or show_review or show_errors
+                
+                # Применить фильтры
+                filtered_items = []
+                for item in processed_items:
+                    # Если ни один фильтр не включен, показываем все (кроме поиска)
+                    if not any_filter_enabled:
+                        filtered_items.append(item)
+                    else:
+                        # Проверяем статус
+                        if item["status"] in ["Успешно", "Успешно (ручная)"] and show_success:
+                            filtered_items.append(item)
+                        elif item["status"] == "Требует проверки" and show_review:
+                            filtered_items.append(item)
+                        elif item["status"] == "Ошибка" and show_errors:
+                            filtered_items.append(item)
+                
+                # Применить поиск
+                if search_term:
+                    search_lower = search_term.lower()
+                    filtered_items = [
+                        item for item in filtered_items
+                        if search_lower in item["name"].lower() or
+                           search_lower in item["label"].lower() or
+                           search_lower in item.get("error", "").lower()
+                    ]
+                
+                st.markdown(f"**Обработанные файлы:** {len(filtered_items)} из {len(processed_items)}")
+                
+                if filtered_items:
+                    for idx, item in enumerate(filtered_items[:50]):
+                        input_uri = Path(item["input_path"]).resolve().as_uri()
+                        details = []
+                        if item["label"]:
+                            details.append(f"класс: {item['label']}")
+                        if item["probability"]:
+                            details.append(f"вероятность: {item['probability']}")
+                        if item["score"]:
+                            details.append(f"score: {item['score']}")
+                        if item["error"]:
+                            details.append(f"ошибка: {item['error']}")
+                        detail_text = f" ({', '.join(details)})" if details else ""
+                        cols = st.columns([5, 1])
+                        cols[0].markdown(f"- [{item['name']}]({input_uri}) — **{item['status']}**{detail_text}")
+                        if cols[1].button("Скопировать путь", key=f"copy_path_{idx}_{item['name']}"):
+                            st.session_state["batch_copy_path"] = item["input_path"]
+                    
+                    if len(filtered_items) > 50:
+                        st.caption(f"Показаны первые 50 из {len(filtered_items)} файлов.")
+                    
+                    if st.session_state.get("batch_copy_path"):
+                        st.text_input(
+                            "Путь для копирования",
+                            value=st.session_state["batch_copy_path"],
+                            disabled=True,
+                        )
+                else:
+                    st.info("Нет файлов, соответствующих выбранным фильтрам.")
             else:
                 st.info("Список пуст.")
 
