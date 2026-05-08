@@ -4,7 +4,7 @@
 Форматы:
   .txt, .md      — обычное чтение;
   .docx         — Word (python-docx);
-  .pdf          — текстовый слой (PyMuPDF); для сканов — OCR (Tesseract + pytesseract);
+  .pdf          — текстовый слой (PyMuPDF); для сканов — OCR (Tesseract, при отсутствии - EasyOCR);
   .odt          — OpenDocument Writer (разбор content.xml из ZIP);
   .rtf          — RTF (striprtf);
   .html, .htm   — HTML (извлечение видимого текста, стандартная библиотека).
@@ -12,12 +12,10 @@
 Старый бинарный .doc (Word 97–2003) не поддерживается — сохраните как .docx.
 
 OCR для PDF:
-  Установите Tesseract OCR (программа, не только pip):
-    Windows: https://github.com/UB-Mannheim/tesseract/wiki
-    Выберите языки rus и eng при установке.
-  pip: pytesseract, Pillow
-  Если tesseract.exe не в PATH, задайте переменную окружения TESSERACT_CMD
-  (полный путь к tesseract.exe).
+
+
+  pip install pytesseract с установленным tesseract (предпочтительно) или pip install easyocr
+
 """
 
 from __future__ import annotations
@@ -37,7 +35,8 @@ TXT_ENCODING = "utf-8"
 PDF_TOTAL_TEXT_MIN_FOR_TEXT_ONLY = 120
 PDF_PAGE_TEXT_MIN_BEFORE_OCR = 45
 PDF_OCR_MATRIX_SCALE = 2.0
-TESSERACT_LANG = "rus+eng"
+EASYOCR_LANGS = ["ru", "en"]
+TESSERACT_LANGS = "rus+eng"
 
 
 def _cfg(key: str, fallback):
@@ -151,28 +150,53 @@ def extract_text_from_odt(file_path: str) -> str:
 def _try_ocr_pdf_page(page) -> str:
     """
     Распознавание текста со страницы PDF как с изображения (скан).
-    Нужны: pip install pytesseract Pillow и установленный Tesseract OCR.
+    Сначала пробует Tesseract, при его отсутствии - EasyOCR.
     """
     try:
         import fitz  # PyMuPDF
-        import pytesseract
         from PIL import Image
+        import numpy as np
+        import io
     except ImportError:
         return ""
-
-    cmd = os.environ.get("TESSERACT_CMD")
-    if cmd:
-        pytesseract.pytesseract.tesseract_cmd = cmd
 
     scale = float(_cfg("ocr.PDF_OCR_MATRIX_SCALE", PDF_OCR_MATRIX_SCALE))
     mat = fitz.Matrix(scale, scale)
     pix = page.get_pixmap(matrix=mat, alpha=False)
     img = Image.open(io.BytesIO(pix.tobytes("png")))
-    lang = str(_cfg("ocr.TESSERACT_LANG", TESSERACT_LANG))
+
+    # Попытка использовать Tesseract
     try:
-        return pytesseract.image_to_string(img, lang=lang)
-    except pytesseract.TesseractNotFoundError:
+        import pytesseract
+        # Получаем текст с изображения с помощью Tesseract
+        text = pytesseract.image_to_string(img, lang='rus+eng')
+        if text.strip():  # Если Tesseract вернул осмысленный текст
+            return text.strip()
+    except ImportError:
+        logger.info("Tesseract не установлен, используется EasyOCR")
+    except Exception as e:
+        logger.warning(f"Tesseract ошибка: {e}. Переход к EasyOCR")
+
+    # Если Tesseract не установлен или не сработал, используем EasyOCR
+    try:
+        import easyocr
+    except ImportError:
+        logger.warning("EasyOCR не установлен. Установите: pip install easyocr или pytesseract")
         return ""
+
+    # Конвертируем PIL Image в numpy array для EasyOCR
+    img_np = np.array(img)
+
+    # Инициализируем reader (с кэшированием для повторных вызовов)
+    if not hasattr(_try_ocr_pdf_page, '_reader'):
+        langs = _cfg("ocr.EASYOCR_LANGS", EASYOCR_LANGS)
+        _try_ocr_pdf_page._reader = easyocr.Reader(langs, gpu=False)  # CPU mode
+
+    try:
+        results = _try_ocr_pdf_page._reader.readtext(img_np)
+        # Собираем текст из результатов
+        text_parts = [result[1] for result in results if result[2] > 0.1]  # confidence > 0.1
+        return ' '.join(text_parts)
     except Exception:
         return ""
 
@@ -181,7 +205,8 @@ def extract_text_from_pdf(file_path: str) -> str:
     """
     Текст из PDF: сначала текстовый слой; при малом объёме текста — OCR (сканы).
 
-    Для сканов без текстового слоя установите Tesseract и pytesseract (см. докстринг модуля).
+    Для сканов без текстового слоя рекомендуется установить pytesseract,
+    при его отсутствии будет использоваться easyocr (см. докстринг модуля).
     """
     try:
         import fitz  # PyMuPDF

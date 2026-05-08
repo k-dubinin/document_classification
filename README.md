@@ -18,7 +18,7 @@ pip install -r requirements.txt
 
 | Задача | Что установить |
 |--------|----------------|
-| Сканы в PDF (OCR) | [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) (языки **rus**, **eng**). При необходимости задайте `TESSERACT_CMD` — полный путь к `tesseract.exe`. |
+| Сканы в PDF (OCR) |  [Tesseract OCR](https://github.com/UB-Mannheim/tesseract/wiki) (языки **rus**, **eng**). При необходимости задайте `TESSERACT_CMD` — полный путь к `tesseract.exe`. пакет `pytesseract` (предпочтительно) или `easyocr` (резервный вариант). |
 | Датасеты Hugging Face | Уже в `requirements.txt`: пакет `datasets` |
 
 ---
@@ -115,7 +115,7 @@ python -m streamlit run ui/app.py
 python main.py --config settings/my.yaml train --data-dir data/corpus_txt
 ```
 
-В YAML задаются, в частности: параметры **TF-IDF**, обучения, путей, секция **`ocr`** (пороги PDF, масштаб OCR, `TESSERACT_LANG`), секция **`logging`** (`level`, `file` — путь к логу относительно корня проекта; `null` для файла — только консоль).
+В YAML задаются, в частности: параметры **TF-IDF**, обучения, путей, секция **`ocr`** (пороги PDF, масштаб OCR, `EASYOCR_LANGS`), секция **`logging`** (`level`, `file` — путь к логу относительно корня проекта; `null` для файла — только консоль).
 
 Подробнее см. комментарии в `settings/default.yaml` и `settings/loader.py`.
 
@@ -317,7 +317,7 @@ python main.py predict -h
 
 ## Зависимости (кратко)
 
-См. полный список в **`requirements.txt`**: **numpy**, **pandas**, **scikit-learn**, **joblib**, **matplotlib**, **pymorphy2**, **nltk**, **python-docx**, **pymupdf**, **striprtf**, **pytesseract**, **Pillow**, **PyYAML**, опционально **datasets**.
+См. полный список в **`requirements.txt`**: **numpy**, **pandas**, **scikit-learn**, **joblib**, **matplotlib**, **pymorphy2**, **nltk**, **python-docx**, **pymupdf**, **striprtf**, **easyocr**, **Pillow**, **PyYAML**, опционально **datasets**.
 
 ---
 

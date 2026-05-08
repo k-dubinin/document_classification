@@ -14,8 +14,9 @@ nltk>=3.8.0
 python-docx>=1.1.0
 pymupdf>=1.23.0
 striprtf>=0.0.26
-# OCR для сканов в PDF (нужна установка Tesseract OCR отдельно от pip)
+# OCR для сканов в PDF (основной вариант - pytesseract, резервный - easyocr)
 pytesseract>=0.3.10
+easyocr>=1.7.0
 Pillow>=10.0.0
 
 # Конфигурация YAML (settings/default.yaml)
