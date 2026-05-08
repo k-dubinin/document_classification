@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Union
 import numpy as np
 from sklearn.pipeline import Pipeline
 
+from evaluation.dataset_short_labels import DEFAULT_SHORT_LABELS
 from evaluation.metrics import compute_main_metrics
 from evaluation.reporting import (
     build_metrics_payload,
@@ -67,6 +68,7 @@ def evaluate_and_report(
             png_path,
             title=f"Матрица ошибок — {model_name}",
             labels=labels_order,
+            short_labels_map=DEFAULT_SHORT_LABELS
         )
         print(f"\nМетрики сохранены: {json_path}")
         print(f"Матрица ошибок (PNG): {png_path}")

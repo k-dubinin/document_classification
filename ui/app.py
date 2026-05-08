@@ -480,11 +480,35 @@ with tab_auto:
                 st.info("Список пуст.")
 
         class_counts = result.get("class_counts", {})
-
-        class_counts = result.get("class_counts", {})
         if class_counts:
+            # Импортируем все доступные сокращения
+            from evaluation.dataset_short_labels import (
+                GOVERNMENT_MANAGEMENT_SHORT_LABELS,
+                MEDICAL_SHORT_LABELS,
+                DEFAULT_SHORT_LABELS
+            )
+            
+            # Проверяем, какие сокращения использовать, на основе ключей
+            # Если есть совпадения с ключами государственного управления, используем их
+            class_keys = list(class_counts.keys())
+            gov_matches = [key for key in class_keys if key in GOVERNMENT_MANAGEMENT_SHORT_LABELS]
+            
+            if len(gov_matches) > len(class_keys) // 2:  # Если больше половины совпадений
+                active_short_labels = GOVERNMENT_MANAGEMENT_SHORT_LABELS
+            else:
+                # Проверяем медицинские сокращения
+                med_matches = [key for key in class_keys if key in MEDICAL_SHORT_LABELS]
+                if len(med_matches) > len(class_keys) // 2:
+                    active_short_labels = MEDICAL_SHORT_LABELS
+                else:
+                    # Используем сокращения по умолчанию
+                    active_short_labels = DEFAULT_SHORT_LABELS
+            
+            # Преобразование названий классов в короткие формы
+            short_names = [active_short_labels.get(name, name) for name in class_keys]
+            
             fig = px.pie(
-                names=list(class_counts.keys()),
+                names=short_names,  # Используем короткие названия
                 values=list(class_counts.values()),
                 hole=0.4,
                 labels={"names": "Класс", "values": "Количество"},

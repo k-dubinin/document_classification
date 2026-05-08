@@ -85,12 +85,12 @@ def save_confusion_matrix_png(
     file_path: str,
     title: str = "Матрица ошибок",
     labels: Optional[Union[List, np.ndarray]] = None,
+    short_labels_map: Optional[Dict[str, str]] = None,
 ) -> None:
     """
     Сохраняет confusion matrix в PNG с нормальным отображением
     русских подписей и длинных названий классов.
     """
-
     import matplotlib
 
     matplotlib.use("Agg")
@@ -112,7 +112,8 @@ def save_confusion_matrix_png(
     # СОКРАЩЕННЫЕ НАЗВАНИЯ КЛАССОВ
     # ==========================================
 
-    SHORT_LABELS = {
+    # Используем стандартные сокращения, если не предоставлены специфические
+    DEFAULT_SHORT_LABELS = {
         "Управление контроля рекламы и недобросовестной конкуренции":
             "Реклама",
 
@@ -137,6 +138,9 @@ def save_confusion_matrix_png(
         "Управление регионального тарифного регулирования":
             "Тарифы",
     }
+    
+    # Используем предоставленные сокращения или стандартные
+    SHORT_LABELS = short_labels_map if short_labels_map is not None else DEFAULT_SHORT_LABELS
 
     # ==========================================
     # LABELS
