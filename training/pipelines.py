@@ -68,6 +68,7 @@ def build_pipeline_linear_svc() -> Pipeline:
         max_iter=config.SVM_MAX_ITER,
         random_state=config.RANDOM_STATE,
         dual=False,
+        class_weight="balanced",
     )
     return Pipeline(
         steps=[

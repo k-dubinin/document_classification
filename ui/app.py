@@ -108,7 +108,14 @@ def _render_metrics_files(out_dir: str) -> None:
     if png_files:
         st.subheader("Матрица ошибок (PNG)")
         for p in png_files:
-            st.image(str(p), caption=p.name, use_container_width=True)
+            # Используем columns для лучшего управления шириной изображения
+            col1, col2, col3 = st.columns([1, 8, 1])  # Центрируем изображение
+            with col2:
+                st.image(
+                    str(p), 
+                    caption=f"Матрица ошибок: {p.name}", 
+                    use_container_width=True  # Используем новый параметр вместо устаревшего use_column_width
+                )
 
 
 def _predict_block(model_path: str, text: str, top_k: int) -> None:
@@ -155,6 +162,9 @@ tab_auto, tab_predict, tab_train, tab_about = st.tabs(
 if "batch_result" not in st.session_state:
     st.session_state.batch_result = None
 
+# Инициализация состояния для отслеживания процесса классификации
+if 'classification_in_progress' not in st.session_state:
+    st.session_state.classification_in_progress = False
 
 with tab_auto:
     st.subheader("Автоматическая классификация документов из директории")
@@ -222,17 +232,42 @@ with tab_auto:
         files_preview = []
     st.caption(f"Найдено файлов для обработки: {len(files_preview)}")
 
-    clicked = st.button("Запустить автоматическую классификацию", type="primary")
+    # Кнопка будет активна только если классификация не выполняется
+    clicked = st.button(
+        "Запустить автоматическую классификацию", 
+        type="primary", 
+        disabled=st.session_state.classification_in_progress
+    )
+    
     progress_placeholder = st.empty()
     stats_box = st.empty()
+    
     if clicked:
         if not auto_model_path or not str(auto_model_path).strip():
             st.error("Укажите путь к модели (.joblib).")
         elif not input_dir or not Path(input_dir).is_dir():
             st.error("Входная директория не найдена.")
         else:
+            # Устанавливаем состояние выполнения
+            st.session_state.classification_in_progress = True
+            # Перерисовываем интерфейс с обновленным состоянием
+            st.rerun()
+    elif st.session_state.classification_in_progress:
+        # Если кнопка не была нажата, но состояние "в процессе", 
+        # значит, классификация уже выполняется
+        if not auto_model_path or not str(auto_model_path).strip():
+            st.error("Укажите путь к модели (.joblib).")
+            st.session_state.classification_in_progress = False
+        elif not input_dir or not Path(input_dir).is_dir():
+            st.error("Входная директория не найдена.")
+            st.session_state.classification_in_progress = False
+        else:
+            import time
+            start_time = time.time()
+            
             total = len(files_preview)
             progress = progress_placeholder.progress(0)
+            timer_text = progress_placeholder.empty()
 
             processed = 0
             ok_count = 0
@@ -300,14 +335,23 @@ with tab_auto:
                     class_counts["Ошибки"] += 1
                     lines.append(f"Файл: {name} → ошибка: {res.error}")
 
+                # Обновление времени выполнения
+                elapsed_time = time.time() - start_time
+                timer_text.text(f"Время выполнения: {elapsed_time:.1f} секунд")
+                
                 # UI обновления
                 if total > 0:
                     progress.progress(min(1.0, processed / total))
+                    
+                # Обновление статистики с отображением времени
                 stats_box.info(
                     f"Обработано: {processed}/{total if total else processed} | "
-                    f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count}"
+                    f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count} | "
+                    f"Время: {elapsed_time:.1f}с"
                 )
 
+            # Обновляем время выполнения в статистике
+            final_elapsed_time = time.time() - start_time
             report_path = write_batch_report_csv(
                 all_results,
                 str(Path(output_dir) / "batch_classification_report.csv"),
@@ -315,7 +359,8 @@ with tab_auto:
 
             stats_box.success(
                 f"Обработано: {processed}/{total if total else processed} | "
-                f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count}"
+                f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count} | "
+                f"Время выполнения: {final_elapsed_time:.1f} секунд"
             )
 
             st.session_state.batch_result = {
@@ -329,8 +374,15 @@ with tab_auto:
                 "lines": lines,
                 "class_counts": dict(class_counts),
                 "processed_items": processed_items,
+                "elapsed_time": final_elapsed_time,
             }
+            
+            # Сброс состояния выполнения сразу после завершения основной классификации
+            st.session_state.classification_in_progress = False
+            # Принудительное обновление UI для отображения изменений
+            st.rerun()
 
+    # Вне зависимости от наличия batch_result, сбрасываем состояние при необходимости
     if st.session_state.batch_result:
         result = st.session_state.batch_result
 
@@ -338,8 +390,13 @@ with tab_auto:
             f"Обработано: {result['processed']} | "
             f"Успешно: {result['ok_count']} | "
             f"Требуют проверки: {result['review_count']} | "
-            f"Ошибок: {result['err_count']}"
+            f"Ошибок: {result['err_count']} | "
+            f"Время выполнения: {result['elapsed_time']:.1f} секунд"
         )
+
+        # Дополнительная проверка и сброс состояния, если оно по какой-то причине осталось True
+        if st.session_state.classification_in_progress:
+            st.session_state.classification_in_progress = False
 
         with st.expander(
             "Список обработанных файлов (Открыть полностью): ",
@@ -453,11 +510,10 @@ with tab_auto:
                 key="download_csv_report"
             )
 
-    if st.session_state.batch_result:
-        result = st.session_state.batch_result
-        st.header("Ручная классификация файлов, требующих проверки")
+        # Отображение ручной классификации только если есть файлы, требующие проверки
         review_items = [item for item in result.get("processed_items", []) if item["status"] == "Требует проверки"]
         if review_items:
+            st.header("Ручная классификация файлов, требующих проверки")
             options = [f"{item['name']} (предсказан: {item['label']}, {item['probability']})" for item in review_items]
             selected_option = st.selectbox("Выберите файл для ручной классификации", options)
             selected_index = options.index(selected_option)
@@ -523,6 +579,9 @@ with tab_auto:
 
                     st.success(f"Файл '{selected_item['name']}' перемещен в папку '{target_class}' и классифицирован как '{target_class}'")
                     st.session_state["show_no_files_message"] = True
+                    # Убедимся, что основная классификация завершена
+                    if st.session_state.classification_in_progress:
+                        st.session_state.classification_in_progress = False
                     st.rerun()
             else:
                 st.warning("Не удалось определить доступные классы.")
@@ -644,6 +703,9 @@ with tab_train:
         status_text = st.empty()
         with st.spinner("Обучение..."):
             try:
+                import time
+                start_time = time.time()  # Запоминаем время начала
+                
                 status_text.text("Загрузка и подготовка данных...")
                 progress.progress(0.2)
                 if train_params["kind"] == "dir":
@@ -693,14 +755,17 @@ with tab_train:
                 save_model_bundle(pipeline, preprocessor, model_file)
 
                 progress.progress(1.0)
-                status_text.text("Готово!")
+                
+                # Вычисляем время обучения
+                elapsed_time = time.time() - start_time
+                status_text.text(f"Готово! Обучение заняло {elapsed_time:.2f} секунд")
 
             except Exception as e:
                 st.error(f"Ошибка обучения: {e}")
                 progress.empty()
                 status_text.empty()
             else:
-                st.success(f"Готово. Модель сохранена: {model_file}")
+                st.success(f"Готово. Модель сохранена: {model_file} (время обучения: {elapsed_time:.2f} сек)")
                 with st.expander("Метрики (JSON payload)", expanded=False):
                     st.json(payload)
                 _render_metrics_files(out_dir)

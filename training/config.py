@@ -28,7 +28,7 @@ HF_DEFAULT_LABEL_COLUMN = "category"
 
 # --- TF-IDF (TfidfVectorizer) ---
 # Ограничение числа признаков; None — без ограничения
-TFIDF_MAX_FEATURES = 10_000
+TFIDF_MAX_FEATURES = 30_000
 
 # Нижняя и верхняя граница документной частоты слова
 TFIDF_MIN_DF = 2
@@ -47,7 +47,7 @@ TFIDF_SUBLINEAR_TF = True
 LR_C = 1.0
 LR_MAX_ITER = 2000
 LR_SOLVER = "lbfgs"
-LR_CLASS_WEIGHT = None  # при дисбалансе классов можно поставить "balanced"
+LR_CLASS_WEIGHT = "balanced"  # при дисбалансе классов можно поставить "balanced"
 
 # --- Naive Bayes  ---
 NB_ALPHA = 1.0

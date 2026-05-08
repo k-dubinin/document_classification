@@ -1,0 +1,392 @@
+"""
+UI для системы классификации документов.
+
+Запуск:
+  streamlit run ui/app.py
+
+UI использует уже реализованные модули проекта:
+  - data.document_text: извлечение текста из файлов
+  - training.train: обучение по CSV / папкам / Hugging Face
+  - evaluation.evaluate: метрики + сохранение JSON/PNG
+  - training.persistence: сохранение модели joblib
+  - prediction.predictor: предсказание + вероятности/оценки
+  - services.batch_classifier: пакетная классификация директории + CSV-отчёт
+  - training.config: константы и настройки
+"""
+
+from __future__ import annotations
+
+import json
+import joblib
+import os
+import shutil
+from collections import Counter
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import plotly.express as px
+import streamlit as st
+
+from data.document_text import read_text_from_document
+from evaluation.evaluate import evaluate_and_report
+from prediction.predictor import predict_with_details
+from services.batch_classifier import (
+    BatchItemResult,
+    classify_directory,
+    iter_document_paths,
+    write_batch_report_csv,
+)
+from training import config
+from training.persistence import load_model_bundle, save_model_bundle
+from training.train import (
+    train_from_csv,
+    train_from_document_folders,
+    train_from_huggingface,
+)
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+MODEL_LABELS_RU: Dict[str, str] = {
+    "logreg": "Логистическая регрессия (logreg)",
+    "nb": "Наивный байес (nb)",
+    "svm": "Линейный SVM (svm)",
+}
+
+MODEL_FILES_HINTS: Dict[str, str] = {
+    config.FILENAME_VECTORIZER_MODEL_LR: "Логистическая регрессия (logreg)",
+    config.FILENAME_VECTORIZER_MODEL_NB: "Наивный байес (nb)",
+    config.FILENAME_VECTORIZER_MODEL_SVM: "Линейный SVM (svm)",
+}
+
+
+def _models_dir() -> str:
+    return str(PROJECT_ROOT / config.DEFAULT_MODELS_DIR)
+
+
+def _ensure_dir(path: str) -> None:
+    os.makedirs(path, exist_ok=True)
+
+
+def _list_model_files(models_dir: str) -> list[Path]:
+    d = Path(models_dir)
+    if not d.exists():
+        return []
+    return sorted(d.glob("*.joblib"), key=lambda p: p.name.lower())
+
+
+def _display_name_for_model_file(path: Path) -> str:
+    hint = MODEL_FILES_HINTS.get(path.name)
+    if hint:
+        return f"{path.name} — {hint}"
+    return path.name
+
+
+def _read_text_upload(tmp_dir: Path, uploaded) -> str:
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    dst = tmp_dir / uploaded.name
+    dst.write_bytes(uploaded.getbuffer())
+    return read_text_from_document(str(dst))
+
+
+def _render_metrics_files(out_dir: str) -> None:
+    out = Path(out_dir)
+    json_files = sorted(out.glob("*_metrics.json"))
+    png_files = sorted(out.glob("*_confusion_matrix.png"))
+
+    if json_files:
+        st.subheader("Метрики (JSON)")
+        for p in json_files:
+            with st.expander(p.name, expanded=False):
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    st.text(p.read_text(encoding="utf-8", errors="replace"))
+                else:
+                    st.json(data)
+
+    if png_files:
+        st.subheader("Матрица ошибок (PNG)")
+        for p in png_files:
+            st.image(str(p), caption=p.name, use_container_width=True)
+
+
+def _predict_block(model_path: str, text: str, top_k: int) -> None:
+    details = predict_with_details(text, model_path, top_k=top_k)
+    st.success(f"Предсказанный класс: {details['label']}")
+
+    if details.get("probability_top"):
+        label = details["label"]
+        prob = None
+        if details.get("probabilities"):
+            prob = details["probabilities"].get(label)
+        if prob is not None:
+            st.write(f"Вероятность предсказанного класса: **{float(prob):.4f}**")
+
+        st.subheader(f"Топ-{top_k} по вероятности")
+        st.table(
+            [{"class": c, "probability": float(p)} for c, p in details["probability_top"]]
+        )
+    elif details.get("score_top"):
+        st.info("**Важно:** Модель svm не поддерживает вычисление вероятностей принадлежности к классам.\n Вместо этого отображаются значения decision_function — оценки, показывающие, насколько документ близок к каждому классу. Чем выше значение по сравнению с другими категориями, тем более вероятным считается отнесение документа к соответствующему классу. Положительные значения обычно указывают на большую уверенность модели, отрицательные — на меньшую, а значения, близкие к нулю, означают, что документ находится близко к границе между классами.")
+        st.subheader(f"Топ-{top_k} по оценке")
+        st.table(
+            [{"class": c, "score": float(s)} for c, s in details["score_top"]]
+        )
+    else:
+        st.warning("Для этой модели недоступны вероятности/оценки.")
+
+    with st.expander("Полный  результат в формате JSON", expanded=False):
+        st.json(details)
+
+
+st.set_page_config(
+    page_title="Классификация документов",
+    page_icon="📄",
+    layout="wide",
+)
+
+st.title("Система автоматической классификации документов")
+st.caption("Локально: извлечение текста → предобработка → TF‑IDF → классификатор (sklearn)")
+
+tab_auto, tab_predict, tab_train, tab_about = st.tabs(
+    ["Автоматическая классификация", "Классификация отдельного документа", "Обучение", "О системе"]
+)
+if "batch_result" not in st.session_state:
+    st.session_state.batch_result = None
+
+# Инициализация состояния для отслеживания процесса классификации
+if 'classification_in_progress' not in st.session_state:
+    st.session_state.classification_in_progress = False
+
+with tab_auto:
+    st.subheader("Автоматическая классификация документов из директории")
+
+    col_a, col_b = st.columns(2)
+    with col_a:
+        models_dir = _models_dir()
+        model_files = _list_model_files(models_dir)
+        display_map = {_display_name_for_model_file(p): str(p) for p in model_files}
+        manual_key = "Указать свой путь…"
+        keys = list(display_map.keys()) + [manual_key]
+
+        default_key = None
+        for k, v in display_map.items():
+            if Path(v).name == config.FILENAME_VECTORIZER_MODEL_LR:
+                default_key = k
+                break
+        idx = keys.index(default_key) if default_key in keys else 0
+        chosen = st.selectbox("Модель (.joblib)", keys, index=idx, key="auto_model")
+
+        auto_model_path: Optional[str]
+        if chosen == manual_key:
+            auto_model_path = st.text_input(
+                "Путь к обученной модели (.joblib)",
+                value=str(Path(models_dir) / config.FILENAME_VECTORIZER_MODEL_LR),
+                key="auto_model_manual",
+            )
+        else:
+            auto_model_path = display_map.get(chosen)
+
+        input_dir = st.text_input(
+            "Входная директория с документами",
+            value=str(PROJECT_ROOT / "data" / "tmp"),
+            help="Файлы НЕ перемещаются. Обработка устойчива к ошибкам отдельных файлов.",
+        )
+        recursive = st.checkbox("Искать файлы в подпапках (рекурсивно)", value=True)
+
+    with col_b:
+        default_out = str(PROJECT_ROOT / "output" / "classified_documents")
+        output_dir = st.text_input(
+            "Директория результата",
+            value=default_out,
+            help="Документы будут КОПИРОВАТЬСЯ в output/<класс>/имя_файла. Выходная папка не очищается.",
+        )
+        threshold_col, _ = st.columns([1, 3])
+        with threshold_col:
+            threshold_percent = st.number_input(
+                "Порог ручной проверки по вероятности (%)",
+                min_value=1,
+                max_value=60,
+                value=20,
+                step=1,
+                help="Применяется только для моделей с вероятностями (Logistic Regression / Naive Bayes). Для SVM не применяется.",
+            )
+
+        st.markdown(
+            "**Поддерживаемые форматы**: `.txt`, `.md`, `.docx`, `.pdf`, `.odt`, `.rtf`, `.html`.\n\n"
+            "Ошибки (битый файл, пустой текст, проблемы с OCR , неподдерживаемый формат) не останавливают процесс классификации."
+        )
+
+    # Предпросмотр количества файлов
+    try:
+        files_preview = iter_document_paths(input_dir, recursive=recursive) if input_dir else []
+    except Exception:
+        files_preview = []
+    st.caption(f"Найдено файлов для обработки: {len(files_preview)}")
+
+    # Кнопка будет активна только если классификация не выполняется
+    clicked = st.button(
+        "Запустить автоматическую классификацию", 
+        type="primary", 
+        disabled=st.session_state.classification_in_progress
+    )
+    
+    progress_placeholder = st.empty()
+    stats_box = st.empty()
+    
+    if clicked:
+        if not auto_model_path or not str(auto_model_path).strip():
+            st.error("Укажите путь к модели (.joblib).")
+        elif not input_dir or not Path(input_dir).is_dir():
+            st.error("Входная директория не найдена.")
+        else:
+            # Устанавливаем состояние выполнения
+            st.session_state.classification_in_progress = True
+            # Перерисовываем интерфейс с обновленным состоянием
+            st.rerun()
+    elif st.session_state.classification_in_progress:
+        # Если кнопка не была нажата, но состояние "в процессе", 
+        # значит, классификация уже выполняется
+        if not auto_model_path or not str(auto_model_path).strip():
+            st.error("Укажите путь к модели (.joblib).")
+            st.session_state.classification_in_progress = False
+        elif not input_dir or not Path(input_dir).is_dir():
+            st.error("Входная директория не найдена.")
+            st.session_state.classification_in_progress = False
+        else:
+            import time
+            start_time = time.time()
+            
+            total = len(files_preview)
+            progress = progress_placeholder.progress(0)
+            timer_text = progress_placeholder.empty()
+
+            processed = 0
+            ok_count = 0
+            review_count = 0
+            err_count = 0
+            lines: list[str] = []
+            all_results: list[BatchItemResult] = []
+            processed_items: list[dict[str, str]] = []
+            class_counts: Counter[str] = Counter()
+
+            for res in classify_directory(
+                auto_model_path,
+                input_dir,
+                output_dir,
+                recursive=recursive,
+                top_k=1,
+                manual_review_probability_threshold=float(threshold_percent) / 100.0,
+            ):
+                all_results.append(res)
+                processed += 1
+                name = Path(res.input_path).name
+                if res.ok:
+                    status = "Успешно"
+                    if res.manual_review_required == "yes":
+                        status = "Требует проверки"
+                        review_count += 1
+                    else:
+                        ok_count += 1
+                    item = {
+                        "name": name,
+                        "input_path": res.input_path,
+                        "status": status,
+                        "label": str(res.label or ""),
+                        "probability": f"{res.probability * 100:.1f}%" if res.probability is not None else "",
+                        "score": f"{res.score:.4f}" if res.score is not None else "",
+                        "output_path": res.output_path or "",
+                        "error": "",
+                    }
+                    processed_items.append(item)
+                    if res.manual_review_required == "yes":
+                        lines.append(
+                            f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}% "
+                            f"→ Требуется ручная проверка"
+                        )
+                    elif res.probability is not None:
+                        lines.append(f"Файл: {name} → класс: {res.label} → вероятность: {res.probability * 100:.1f}%")
+                    elif res.score is not None:
+                        lines.append(f"Файл: {name} → класс: {res.label} → score: {res.score:.4f} (SVM, не вероятность)")
+                    else:
+                        lines.append(f"Файл: {name} → класс: {res.label}")
+                    class_counts[str(res.label or "Неизвестно")] += 1
+                else:
+                    err_count += 1
+                    item = {
+                        "name": name,
+                        "input_path": res.input_path,
+                        "status": "Ошибка",
+                        "label": "",
+                        "probability": "",
+                        "score": "",
+                        "output_path": res.output_path or "",
+                        "error": res.error or "",
+                    }
+                    processed_items.append(item)
+                    class_counts["Ошибки"] += 1
+                    lines.append(f"Файл: {name} → ошибка: {res.error}")
+
+                # Обновление времени выполнения
+                elapsed_time = time.time() - start_time
+                timer_text.text(f"Время выполнения: {elapsed_time:.1f} секунд")
+                
+                # UI обновления
+                if total > 0:
+                    progress.progress(min(1.0, processed / total))
+                    
+                # Обновление статистики с отображением времени
+                stats_box.info(
+                    f"Обработано: {processed}/{total if total else processed} | "
+                    f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count} | "
+                    f"Время: {elapsed_time:.1f}с"
+                )
+
+            # Обновляем время выполнения в статистике
+            final_elapsed_time = time.time() - start_time
+            report_path = write_batch_report_csv(
+                all_results,
+                str(Path(output_dir) / "batch_classification_report.csv"),
+            )
+
+            stats_box.success(
+                f"Обработано: {processed}/{total if total else processed} | "
+                f"Успешно: {ok_count} | Требуют проверки: {review_count} | Ошибок: {err_count} | "
+                f"Время выполнения: {final_elapsed_time:.1f} секунд"
+            )
+
+            st.session_state.batch_result = {
+                "processed": processed,
+                "ok_count": ok_count,
+                "review_count": review_count,
+                "err_count": err_count,
+                "threshold_percent": threshold_percent,
+                "output_dir": os.path.abspath(output_dir),
+                "report_path": report_path,
+                "lines": lines,
+                "class_counts": dict(class_counts),
+                "processed_items": processed_items,
+                "elapsed_time": final_elapsed_time,
+            }
+            
+            # Сброс состояния выполнения
+            st.session_state.classification_in_progress = False
+
+    if st.session_state.batch_result:
+        result = st.session_state.batch_result
+
+        stats_box.success(
+            f"Обработано: {result['processed']} | "
+            f"Успешно: {result['ok_count']} | "
+            f"Требуют проверки: {result['review_count']} | "
+            f"Ошибок: {result['err_count']} | "
+            f"Время выполнения: {result['elapsed_time']:.1f} секунд"
+        )
+
+        # Гарантированно сбрасываем состояние основной классификации после отображения результатов
+        st.session_state.classification_in_progress = False
+
+        st.header("Ручная классификация файлов, требующих проверки")
+        review_items = [item for item in result.get("processed_items", []) if item["status"] == "Требует проверки"]
+        if review_items:

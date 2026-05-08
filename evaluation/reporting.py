@@ -87,35 +87,185 @@ def save_confusion_matrix_png(
     labels: Optional[Union[List, np.ndarray]] = None,
 ) -> None:
     """
-    Сохраняет изображение матрицы ошибок в PNG (для вставки в дипломную работу).
-    Подписи классов на русском: используем системный шрифт Windows при необходимости.
+    Сохраняет confusion matrix в PNG с нормальным отображением
+    русских подписей и длинных названий классов.
     """
+
     import matplotlib
 
     matplotlib.use("Agg")
+
     import matplotlib.pyplot as plt
+    from sklearn.metrics import confusion_matrix
+    import numpy as np
+
+    # ==========================================
+    # ПАПКА ДЛЯ СОХРАНЕНИЯ
+    # ==========================================
 
     directory = os.path.dirname(file_path)
+
     if directory and not os.path.isdir(directory):
         os.makedirs(directory, exist_ok=True)
 
-    # Поддержка кириллицы в подписях на типичной установке Windows
-    plt.rcParams["font.sans-serif"] = ["Segoe UI", "DejaVu Sans", "Arial"]
-    plt.rcParams["axes.unicode_minus"] = False
+    # ==========================================
+    # СОКРАЩЕННЫЕ НАЗВАНИЯ КЛАССОВ
+    # ==========================================
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    display_labels = labels
-    if display_labels is None:
-        display_labels = np.unique(np.concatenate([y_true, y_pred]))
+    SHORT_LABELS = {
+        "Управление контроля рекламы и недобросовестной конкуренции":
+            "Реклама",
 
-    ConfusionMatrixDisplay.from_predictions(
+        "Управление регулирования электроэнергетики":
+            "Электроэнергетика",
+
+        "Управление регулирования связи и информационных технологий":
+            "Связь и ИТ",
+
+        "Управление контроля строительства и природных ресурсов":
+            "Строительство",
+
+        "Управление контроля финансовых рынков":
+            "Финансы",
+
+        "Управление регулирования топливно-энергетического комплекса и химической промышленности":
+            "ТЭК и химпром",
+
+        "Управления регулирования транспорта":
+            "Транспорт",
+
+        "Управление регионального тарифного регулирования":
+            "Тарифы",
+    }
+
+    # ==========================================
+    # LABELS
+    # ==========================================
+
+    if labels is None:
+        labels = np.unique(np.concatenate([y_true, y_pred]))
+
+    # Короткие названия только для отображения
+    short_labels = [
+        SHORT_LABELS.get(label, label)
+        for label in labels
+    ]
+
+    # ==========================================
+    # CONFUSION MATRIX
+    # ==========================================
+
+    cm = confusion_matrix(
         y_true,
         y_pred,
-        labels=display_labels,
-        ax=ax,
-        colorbar=True,
+        labels=labels,
     )
-    ax.set_title(title)
+
+    # ==========================================
+    # НАСТРОЙКА ШРИФТОВ
+    # ==========================================
+
+    plt.rcParams["font.sans-serif"] = [
+        "Segoe UI",
+        "DejaVu Sans",
+        "Arial",
+    ]
+
+    plt.rcParams["axes.unicode_minus"] = False
+
+    # ==========================================
+    # ОПРЕДЕЛЕНИЕ РАЗМЕРА ФИГУРЫ В ЗАВИСИМОСТИ ОТ КОЛИЧЕСТВА КЛАССОВ
+    # ==========================================
+
+    n_classes = len(labels)
+    # Увеличиваем размер фигуры в зависимости от количества классов
+    figsize_multiplier = max(1, n_classes / 6)
+    fig_width = max(10, 14 * figsize_multiplier)
+    fig_height = max(8, 14 * figsize_multiplier)
+
+    # ==========================================
+    # FIGURE
+    # ==========================================
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+
+    # Heatmap
+    im = ax.imshow(cm, cmap="Blues", interpolation='nearest')
+
+    # Colorbar
+    cbar = fig.colorbar(im, ax=ax)
+    cbar.ax.tick_params(labelsize=12)  # Увеличиваем размер шрифта для цветовой шкалы
+
+    # ==========================================
+    # ОСИ
+    # ==========================================
+
+    ax.set_xticks(np.arange(len(short_labels)))
+    ax.set_yticks(np.arange(len(short_labels)))
+
+    ax.set_xticklabels(short_labels)
+    ax.set_yticklabels(short_labels)
+
+    # Поворот подписей X
+    plt.setp(
+        ax.get_xticklabels(),
+        rotation=45,
+        ha="right",
+        rotation_mode="anchor",
+        fontsize=12  # Увеличиваем размер шрифта
+    )
+
+    # Поворот подписей Y
+    plt.setp(
+        ax.get_yticklabels(),
+        fontsize=12  # Увеличиваем размер шрифта
+    )
+
+    # ==========================================
+    # ЗНАЧЕНИЯ ВНУТРИ КЛЕТОК
+    # ==========================================
+
+    # Определяем порог для изменения цвета текста
+    thresh = cm.max() / 2.
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(
+                j, i, format(cm[i, j], 'd'),
+                ha="center", va="center",
+                color="white" if cm[i, j] > thresh else "black",
+                fontsize=10 if n_classes > 10 else 12  # Уменьшаем размер шрифта для больших матриц
+            )
+
+    # ==========================================
+    # ЗАГОЛОВКИ
+    # ==========================================
+
+    ax.set_title(title, fontsize=16, pad=20)
+
+    ax.set_xlabel(
+        "Предсказанный класс",
+        fontsize=14
+    )
+
+    ax.set_ylabel(
+        "Истинный класс",
+        fontsize=14
+    )
+
+    # ==========================================
+    # ОТСТУПЫ
+    # ==========================================
+
     plt.tight_layout()
-    plt.savefig(file_path, dpi=150)
+
+    # ==========================================
+    # СОХРАНЕНИЕ
+    # ==========================================
+
+    plt.savefig(
+        file_path,
+        dpi=300,
+        bbox_inches='tight'  # Улучшает отступы
+    )
+
     plt.close(fig)
