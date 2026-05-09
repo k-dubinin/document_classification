@@ -637,10 +637,12 @@ with tab_predict:
 
         model_path: Optional[str]
         if chosen == manual_key:
-            model_path = st.text_input(
+            raw_model_path = st.text_input(
                 "Путь к обученной модели (.joblib)",
                 value=str(Path(models_dir) / config.FILENAME_VECTORIZER_MODEL_LR),
             )
+            # Удаляем кавычки из введенного пути, если они есть
+            model_path = raw_model_path.strip('"\'')
         else:
             model_path = display_map.get(chosen)
             if model_path is None:
@@ -684,7 +686,9 @@ with tab_predict:
 with tab_train:
     st.subheader("Обучение модели")
 
-    out_dir = st.text_input("Каталог для артефактов (models/…)", value=_models_dir())
+    # Обработка ввода каталога с удалением кавычек
+    raw_out_dir = st.text_input("Каталог для артефактов (models/…)", value=_models_dir())
+    out_dir = raw_out_dir.strip('"\'')
     _ensure_dir(out_dir)
 
     model_choice = st.selectbox(
@@ -702,16 +706,22 @@ with tab_train:
     train_params: Dict[str, Any] = {}
 
     if source == "Локальная директория (подпапка = класс)":
-        data_dir = st.text_input("Путь к директории с корпусными данными", value=str(PROJECT_ROOT / "data" / "corpus_txt"))
+        # Обработка ввода пути к директории с удалением кавычек
+        raw_data_dir = st.text_input("Путь к директории с корпусными данными", value=str(PROJECT_ROOT / "data" / "corpus_txt"))
+        data_dir = raw_data_dir.strip('"\'')
         train_params = {"kind": "dir", "data_dir": data_dir}
     elif source == "CSV (text,label)":
-        csv_path = st.text_input("Путь к CSV", value=str(PROJECT_ROOT / "data" / "sample_train.csv"))
+        raw_csv_path = st.text_input("Путь к CSV", value=str(PROJECT_ROOT / "data" / "sample_train.csv"))
+        # Удаляем кавычки из введенного пути, если они есть
+        csv_path = raw_csv_path.strip('"\'')
         text_col = st.text_input("Столбец текста", value=config.CSV_TEXT_COLUMN)
         label_col = st.text_input("Столбец класса", value=config.CSV_LABEL_COLUMN)
         train_params = {"kind": "csv", "csv_path": csv_path, "text_col": text_col, "label_col": label_col}
     else:
-        dataset_id = st.text_input("Hugging Face dataset", value=config.HF_DEFAULT_DATASET)
-        split = st.text_input("split", value=config.HF_DEFAULT_SPLIT)
+        raw_dataset_id = st.text_input("Hugging Face dataset", value=config.HF_DEFAULT_DATASET)
+        dataset_id = raw_dataset_id.strip('"\'')
+        raw_split = st.text_input("split", value=config.HF_DEFAULT_SPLIT)
+        split = raw_split.strip('"\'')
         hf_text_col = st.text_input("Столбец текста", value=config.HF_DEFAULT_TEXT_COLUMN)
         hf_label_col = st.text_input("Столбец класса", value=config.HF_DEFAULT_LABEL_COLUMN)
         train_params = {
