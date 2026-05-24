@@ -108,6 +108,10 @@ def _model_output_path_and_title(model_kind: str) -> Tuple[str, str]:
 
 def cmd_train(args: argparse.Namespace) -> None:
     """Обучение одной модели (логистическая регрессия, наивный байес или линейный SVM)."""
+    import time
+    
+    start_time = time.time()  # Замеряем время начала обучения
+    
     hf_id = getattr(args, "hf_dataset", None)
     if hf_id:
         pipeline, _X_train, _y_train, X_test, y_test, preprocessor = train_from_huggingface(
@@ -130,6 +134,9 @@ def cmd_train(args: argparse.Namespace) -> None:
             label_column=args.label_column,
         )
 
+    # Вычисляем время обучения
+    training_duration = time.time() - start_time
+    
     out_name, model_title = _model_output_path_and_title(args.model)
     out_file = os.path.join(args.out, out_name)
 
@@ -140,13 +147,19 @@ def cmd_train(args: argparse.Namespace) -> None:
         model_name=model_title,
         output_dir=args.out,
         labels_order=pipeline.classes_,
+        training_time=training_duration,  # Передаем время обучения
     )
     save_model_bundle(pipeline, preprocessor, out_file)
     print(f"\nМодель сохранена: {out_file}")
+    print(f"Время обучения: {training_duration:.2f} секунд")
 
 
 def cmd_compare(args: argparse.Namespace) -> None:
     """Обучение обеих моделей и сравнение метрик на одной тестовой выборке."""
+    import time
+    
+    start_time = time.time()  # Замеряем время начала
+    
     hf_id = getattr(args, "hf_dataset", None)
     if hf_id:
         result = train_both_models_from_huggingface(
@@ -170,6 +183,9 @@ def cmd_compare(args: argparse.Namespace) -> None:
     y_test = result["y_test"]
     preprocessor = result["preprocessor"]
 
+    # Вычисляем общее время обучения
+    total_training_duration = time.time() - start_time
+    
     # Оценка и файлы для логистической регрессии
     evaluate_and_report(
         pipe_lr,
@@ -178,6 +194,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
         model_name="Logistic Regression",
         output_dir=args.out,
         labels_order=pipe_lr.classes_,
+        training_time=total_training_duration,  # Передаем общее время обучения
     )
     save_model_bundle(
         pipe_lr,
@@ -193,6 +210,7 @@ def cmd_compare(args: argparse.Namespace) -> None:
         model_name="Naive Bayes",
         output_dir=args.out,
         labels_order=pipe_nb.classes_,
+        training_time=total_training_duration,  # Передаем общее время обучения
     )
     save_model_bundle(
         pipe_nb,
@@ -208,8 +226,50 @@ def cmd_compare(args: argparse.Namespace) -> None:
         X_test,
         y_test,
     )
-    print_metrics_comparison_table(rows)
-    print(f"\nСохранены модели: {config.FILENAME_VECTORIZER_MODEL_LR}, {config.FILENAME_VECTORIZER_MODEL_NB}")
+    table = Table(
+        title="Сравнение моделей",
+        caption=f"Тестовая выборка: {len(y_test)} объектов",
+        caption_justify="left",
+    )
+    table.add_column("Модель", justify="left")
+    table.add_column("Accuracy", justify="center")
+    table.add_column("Precision", justify="center")
+    table.add_column("Recall", justify="center")
+    table.add_column("F1", justify="center")
+
+    for row in rows:
+        table.add_row(*row)
+
+    console = Console()
+    console.print(table)
+
+    out_path = os.path.join(args.out, "comparison_metrics.json")
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "test_size": len(y_test),
+                "models": {
+                    "logistic_regression": {
+                        "accuracy": float(rows[0][1]),
+                        "precision": float(rows[0][2]),
+                        "recall": float(rows[0][3]),
+                        "f1": float(rows[0][4]),
+                    },
+                    "naive_bayes": {
+                        "accuracy": float(rows[1][1]),
+                        "precision": float(rows[1][2]),
+                        "recall": float(rows[1][3]),
+                        "f1": float(rows[1][4]),
+                    },
+                },
+                "training_time_seconds": total_training_duration,  # Добавляем время обучения в JSON
+            },
+            f,
+            indent=2,
+            ensure_ascii=False,
+        )
+    print(f"\nСравнение сохранено: {out_path}")
+    print(f"Общее время обучения обеих моделей: {total_training_duration:.2f} секунд")
 
 
 def cmd_predict(args: argparse.Namespace) -> None:

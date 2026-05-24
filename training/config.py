@@ -34,7 +34,7 @@ TFIDF_MAX_FEATURES = 30_000
 TFIDF_MIN_DF = 2
 TFIDF_MAX_DF = 0.95
 
-# Н-граммы: (1, 2) — униграммы и биграммы
+#  Н-граммы: (1, 2) — униграммы, биграммы
 TFIDF_NGRAM_RANGE = (1, 2)
 
 # Нормализация L2 для вектора документа
@@ -46,7 +46,7 @@ TFIDF_SUBLINEAR_TF = True
 # --- Logistic Regression ---
 LR_C = 1.0
 LR_MAX_ITER = 2000
-LR_SOLVER = "lbfgs"
+LR_SOLVER = "liblinear"
 LR_CLASS_WEIGHT = "balanced"  # при дисбалансе классов можно поставить "balanced"
 
 # --- Naive Bayes  ---

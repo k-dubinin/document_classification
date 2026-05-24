@@ -30,6 +30,7 @@ def evaluate_and_report(
     model_name: str,
     output_dir: Optional[str] = None,
     labels_order: Optional[Union[list, np.ndarray]] = None,
+    training_time: Optional[float] = None,  # Добавляем параметр для времени обучения
 ) -> Dict[str, Any]:
     """
     Предсказание на тесте, вывод матрицы ошибок и отчёта, сохранение JSON и PNG.
@@ -47,6 +48,11 @@ def evaluate_and_report(
     print("\n--- Сводные метрики ---")
     for key, value in main_metrics.items():
         print(f"  {key}: {value:.4f}")
+
+    # Выводим время обучения, если оно передано
+    if training_time is not None:
+        print(f"\n--- Время обучения ---")
+        print(f"  Время обучения модели: {training_time:.2f} секунд")
 
     payload = build_metrics_payload(
         y_test,

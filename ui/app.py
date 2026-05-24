@@ -769,6 +769,10 @@ with tab_train:
                 # Оценка + артефакты
                 status_text.text("Оценка и сохранение...")
                 progress.progress(0.8)
+                
+                # Вычисляем время обучения до вызова evaluate_and_report
+                training_time = time.time() - start_time
+                
                 title_map = {"logreg": "Logistic Regression", "nb": "Naive Bayes", "svm": "Linear SVM"}
                 payload = evaluate_and_report(
                     pipeline,
@@ -777,6 +781,7 @@ with tab_train:
                     model_name=title_map[model_kind],
                     output_dir=out_dir,
                     labels_order=pipeline.classes_,
+                    training_time=training_time,  # Передаем время обучения
                 )
 
                 # Сохранение модели
