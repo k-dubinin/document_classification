@@ -68,3 +68,13 @@ htmlcov/
 
 # Выходные данные
 output/
+
+# Чувствительные файлы конфигурации
+config/secrets*
+config/credentials*
+*.env
+config/.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
