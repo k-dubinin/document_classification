@@ -33,7 +33,7 @@ pip install -r requirements.txt
 streamlit run ui/app.py
 ```
 
-### Запуск в новой среде через Docker
+### Запуск в Docker
 
 1. Установите Docker и Docker Compose
 2. Из корня проекта выполните:
@@ -44,6 +44,14 @@ docker compose up
 
 Приложение будет доступно по адресу: http://localhost:8501
 
+Для запуска только API:
+
+```bash
+docker compose up api
+```
+
+API будет доступен по адресу: http://localhost:8000
+
 Для сборки без кеширования (если были изменения):
 
 ```bash
@@ -52,6 +60,65 @@ docker compose up
 ```
 
 Объемы данных (models, config, data, output) монтируются из локальной директории в контейнер.
+
+---
+
+## REST API
+
+Доступен REST API для внутреннего использования в корпоративной сети. API реализован с использованием FastAPI и предоставляет следующие эндпоинты:
+
+### Эндпоинты
+
+- `GET /api/v1/health` - проверка работоспособности
+- `GET /api/v1/model/info` - информация о загруженной модели
+- `POST /api/v1/classify/text` - классификация текста
+- `POST /api/v1/classify/file` - классификация файла документа
+- `POST /api/v1/batch` - пакетная классификация документов из ZIP-архива или директории
+
+### Примеры запросов
+
+Проверка работоспособности:
+```bash
+curl -X GET http://localhost:8000/api/v1/health
+```
+
+Получение информации о модели:
+```bash
+curl -X GET http://localhost:8000/api/v1/model/info
+```
+
+Классификация текста:
+```bash
+curl -X POST http://localhost:8000/api/v1/classify/text \
+  -H "Content-Type: application/json" \
+  -d '{"text": "Текст документа для классификации"}'
+```
+
+Классификация файла:
+```bash
+curl -X POST http://localhost:8000/api/v1/classify/file \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@document.pdf"
+```
+
+Пакетная классификация из ZIP-архива:
+```bash
+curl -X POST http://localhost:8000/api/v1/batch \
+  -H "Content-Type: multipart/form-data" \
+  -F "zip_file=@documents.zip" \
+  -F "threshold=20.0"
+```
+
+Пакетная классификация из директории (только внутри контейнера):
+```bash
+curl -X POST "http://localhost:8000/api/v1/batch?input_dir=/app/data/input&threshold=20.0"
+```
+
+### Документация
+
+Доступна автоматическая документация API:
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ---
 
@@ -70,7 +137,7 @@ docker compose up
 - текстовый статус, отображающий текущий этап обработки;
 - итоговый отчёт с метриками и матрицей ошибок;
 - сохранение модели в формате `.joblib` в выбранную директорию;
-
+- отображение времени обучения в консоли и в UI.
 
 ---
 
@@ -100,8 +167,8 @@ docker compose up
   - поиск по имени файла, классу или сообщению об ошибке;
   - по умолчанию показывается весь список, фильтры позволяют выбрать нужные статусы;
 - сохраняется CSV-отчёт: `output/.../batch_classification_report.csv`;
-- доступна визуализация распределения файлов по классам (круговая диаграмма);
-- отображается время выполнения классификации в UI и в логах.
+- доступна визуализация распределения файлов по классам (круговая диаграмма) с короткими названиями классов;
+- отображается время выполнения классификации в UI и в логе.
 
 Ручная классификация в UI:
 - если файл оказался в папке `Требует_проверки`, появляется секция ручной классификации ниже отчётов;
@@ -130,6 +197,10 @@ docker compose up
 | `services/batch_classifier.py` | Сервис пакетной классификации в директории |
 | `models/` | Сохранённые `.joblib`, метрики, графики (по умолчанию) |
 | `data/corpus_txt/` | Пример корпуса: подпапки = классы |
+| `api/` | REST API модуль |
+| `api/main.py` | Точка входа для API |
+| `api/routes/` | Маршруты API |
+| `api/schemas/` | Схемы данных API |
 | `Dockerfile` | Docker-образ приложения |
 | `docker-compose.yml` | Конфигурация для запуска в контейнере |
 | `.dockerignore` | Файлы, исключаемые из образа Docker |
@@ -283,7 +354,7 @@ python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp 
 
 Поддерживаемые расширения файлов: **`.txt`**, **`.md`**, **`.docx`**, **`.pdf`**, **`.odt`**, **`.rtf`**, **`.html`**, **`.htm`**.
 
-Без флагов **`--probs`** и **`--json`** в консоль выводятся **предсказанный класс** и **вероятность этого класса** (для логистической регрессии и наивного байеса) или **оценка decision_function** для этого класса (для SVM; это не вероятности).
+Без флагов **`--probs`** и **`--json`** в консоль выводятся **предсказанный класс** и **вероятность этого класса** (для логистической регрессии и наивного байеса) или **оценка decision_function** для этого класса (для SVM; это не вероятность).
 
 #### Вероятности и JSON
 
@@ -348,7 +419,7 @@ python main.py predict -h
 
 ## Зависимости (кратко)
 
-См. полный список в **`requirements.txt`**: **numpy**, **pandas**, **scikit-learn**, **joblib**, **matplotlib**, **pymorphy2**, **nltk**, **python-docx**, **pymupdf**, **striprtf**, **easyocr**, **Pillow**, **PyYAML**, опционально **datasets**.
+См. полный список в **`requirements.txt`**: **numpy**, **pandas**, **scikit-learn**, **joblib**, **matplotlib**, **pymorphy2**, **nltk**, **python-docx**, **pymupdf**, **striprtf**, **easyocr**, **Pillow**, **PyYAML**, **fastapi**, **uvicorn**, **python-multipart**, опционально **datasets**.
 
 ---
 

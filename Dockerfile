@@ -1,17 +1,17 @@
-# базовый образ Python 3.11 slim
+# Используем базовый образ Python 3.11 slim
 FROM python:3.11-slim
 
-# рабочая директория
+# Устанавливаем рабочую директорию
 WORKDIR /app
 
-# ENV переменные
+# Устанавливаем ENV переменные
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     MPLBACKEND=Agg
 
-# Устанавливаем системные зависимости, включая Tesseract OCR и Poppler (для ообработки PDF)
+# Устанавливаем системные зависимости, включая Tesseract OCR и Poppler
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     tesseract-ocr \
@@ -19,6 +19,8 @@ RUN apt-get update && \
     tesseract-ocr-rus \
     tesseract-ocr-eng \
     poppler-utils \
+    libgl1 \
+    libglib2.0-0 \
     gcc \
     g++ \
     && rm -rf /var/lib/apt/lists/*
@@ -26,14 +28,14 @@ RUN apt-get update && \
 # Копируем файл зависимостей
 COPY requirements.txt .
 
-# Python зависимости
+# Устанавливаем Python зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
-
+# Копируем остальные файлы проекта
 COPY . .
 
-# Открываем порт 8501 для Streamlit
-EXPOSE 8501
+# Открываем порты 8501 (Streamlit) и 8000 (FastAPI)
+EXPOSE 8501 8000
 
-# Команда запуска приложения
+# Команда запуска приложения (по умолчанию Streamlit)
 CMD ["streamlit", "run", "ui/app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]

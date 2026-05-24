@@ -26,5 +26,10 @@ PyYAML>=6.0.0
 streamlit>=1.33.0
 plotly>=5.17.0
 
+# API
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+
 # Опционально: загрузка обучающих данных с Hugging Face (обращения, размеченные корпуса)
 datasets>=2.14.0
