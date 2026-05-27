@@ -1,35 +1,21 @@
-# Core ML / data
-numpy>=1.24.0
-pandas>=2.0.0
-scikit-learn>=1.3.0
-joblib>=1.3.0
-matplotlib>=3.7.0
-
-# Russian NLP
-pymorphy2>=0.9.1
-pymorphy2-dicts-ru>=2.4.417127.4579844
-nltk>=3.8.0
-
-# Извлечение текста из документов (классификация и обучение из папок)
-python-docx>=1.1.0
-pymupdf>=1.23.0
-striprtf>=0.0.26
-# OCR для сканов в PDF (основной вариант - pytesseract, резервный - easyocr)
-pytesseract>=0.3.10
-easyocr>=1.7.0
-Pillow>=10.0.0
-
-# Конфигурация YAML (settings/default.yaml)
-PyYAML>=6.0.0
-
-# UI
-streamlit>=1.33.0
-plotly>=5.17.0
-
-# API
-fastapi>=0.104.0
-uvicorn>=0.24.0
-python-multipart>=0.0.6
-
-# Опционально: загрузка обучающих данных с Hugging Face (обращения, размеченные корпуса)
-datasets>=2.14.0
+numpy
+pandas
+scikit-learn
+joblib
+matplotlib
+pymorphy2
+nltk
+python-docx
+PyMuPDF
+striprtf
+easyocr
+Pillow
+PyYAML
+streamlit
+fastapi
+uvicorn[standard]
+python-multipart
+datasets
+tqdm
+click
+watchdog==3.0.0

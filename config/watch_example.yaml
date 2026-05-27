@@ -1,0 +1,41 @@
+# Конфигурация для режима мониторинга директории
+watch:
+  model_path: "models/pipeline_logreg.joblib"
+  input_dir: "input"
+  output_dir: "output/classified"
+  review_dir: "output/manual_review"
+  confidence_threshold: 20.0
+  recursive: true
+  polling_interval: 1.0
+
+# Настройки логирования
+logging:
+  level: INFO
+  file: logs/watch_service.log
+# Пример конфигурации для режима мониторинга директории (watch mode)
+watch:
+  # Путь к модели для классификации
+  model_path: "models/pipeline_logreg.joblib"
+  
+  # Входная директория для мониторинга новых документов
+  input_dir: "input"
+  
+  # Выходная директория для классифицированных файлов
+  output_dir: "output/classified"
+  
+  # Директория для файлов, требующих ручной проверки
+  review_dir: "output/manual_review"
+  
+  # Порог уверенности модели для автоматической классификации (в процентах)
+  confidence_threshold: 20.0
+  
+  # Мониторить подпапки рекурсивно
+  recursive: true
+  
+  # Интервал проверки файловой системы (в секундах)
+  polling_interval: 1.0
+
+# Настройки логирования
+logging:
+  level: INFO
+  file: logs/watch_service.log

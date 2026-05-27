@@ -3,7 +3,6 @@ version: '3.8'
 services:
   app:
     build: .
-    container_name: document-classification-app
     ports:
       - "8501:8501"
     volumes:
@@ -11,16 +10,14 @@ services:
       - ./config:/app/config
       - ./data:/app/data
       - ./output:/app/output
-    environment:
-      - PYTHONPATH=/app
+      - ./input:/app/input
     stdin_open: true
     tty: true
     restart: unless-stopped
-    command: ["streamlit", "run", "ui/app.py", "--server.address", "0.0.0.0", "--server.port", "8501"]
+    container_name: document_classifier_ui
 
   api:
     build: .
-    container_name: document-classification-api
     ports:
       - "8000:8000"
     volumes:
@@ -28,7 +25,7 @@ services:
       - ./config:/app/config
       - ./data:/app/data
       - ./output:/app/output
-    environment:
-      - PYTHONPATH=/app
+      - ./input:/app/input
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
     restart: unless-stopped
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    container_name: document_classifier_api

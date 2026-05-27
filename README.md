@@ -75,6 +75,9 @@ docker compose up
 - `POST /api/v1/classify/text` - классификация текста
 - `POST /api/v1/classify/file` - классификация файла документа
 - `POST /api/v1/batch` - пакетная классификация документов
+- `POST /api/v1/watch/start` - запуск режима мониторинга директории
+- `POST /api/v1/watch/stop` - остановка режима мониторинга директории
+- `GET /api/v1/watch/status` - статус режима мониторинга директории
 
 ### Примеры запросов
 
@@ -93,31 +96,19 @@ curl -X GET http://localhost:8000/api/v1/model/info
 curl -X GET "http://localhost:8000/api/v1/model/info-by-name?model_name=pipeline_svm.joblib"
 ```
 
-Классификация текста:
+Запуск режима мониторинга:
 ```bash
-curl -X POST http://localhost:8000/api/v1/classify/text \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Текст документа для классификации"}'
+curl -X POST "http://localhost:8000/api/v1/watch/start?model_path=models/pipeline_logreg.joblib&input_dir=input&output_dir=output/classified&review_dir=output/review&confidence_threshold=20.0"
 ```
 
-Классификация файла:
+Остановка режима мониторинга:
 ```bash
-curl -X POST http://localhost:8000/api/v1/classify/file \
-  -H "Content-Type: multipart/form-data" \
-  -F "file=@document.pdf"
+curl -X POST http://localhost:8000/api/v1/watch/stop
 ```
 
-Пакетная классификация из ZIP-архива:
+Проверка статуса режима мониторинга:
 ```bash
-curl -X POST http://localhost:8000/api/v1/batch \
-  -H "Content-Type: multipart/form-data" \
-  -F "zip_file=@documents.zip" \
-  -F "threshold=20.0"
-```
-
-Пакетная классификация из директории:
-```bash
-curl -X POST "http://localhost:8000/api/v1/batch?input_dir=/app/data/input&threshold=20.0"
+curl -X GET http://localhost:8000/api/v1/watch/status
 ```
 
 ### Документация
@@ -125,6 +116,49 @@ curl -X POST "http://localhost:8000/api/v1/batch?input_dir=/app/data/input&thres
 Доступна автоматическая документация API:
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+
+---
+
+## Режим мониторинга (Watch Mode)
+
+Система поддерживает режим постоянного мониторинга директории для автоматической классификации новых документов. В этом режиме:
+
+1. Система запускается один раз и работает непрерывно.
+2. Отслеживает появление новых файлов во входной директории.
+3. При появлении нового документа:
+   - автоматически извлекает текст,
+   - выполняет классификацию,
+   - определяет класс документа,
+   - вычисляет уверенность модели,
+   - перемещает файл в подпапку соответствующего класса.
+4. Если уверенность ниже заданного порога:
+   - файл перемещается в отдельную папку `manual_review`.
+5. Результаты логируются.
+6. Система работает длительное время без перезапуска.
+
+### Запуск режима мониторинга
+
+Через CLI:
+```bash
+python main.py watch --model models/pipeline_logreg.joblib --input-dir input --output-dir output/classified --review-dir output/manual_review --threshold 20.0
+```
+
+Через API:
+```bash
+curl -X POST "http://localhost:8000/api/v1/watch/start?model_path=models/pipeline_logreg.joblib&input_dir=input&output_dir=output/classified&review_dir=output/manual_review&confidence_threshold=20.0"
+```
+
+### Параметры режима мониторинга
+
+| Параметр | Описание |
+|----------|----------|
+| `--model` | Путь к .joblib файлу модели |
+| `--input-dir` | Входная директория для мониторинга |
+| `--output-dir` | Выходная директория для классифицированных файлов |
+| `--review-dir` | Директория для файлов на ручной проверке |
+| `--threshold` | Порог уверенности для ручной проверки (в процентах) |
+| `--recursive` | Мониторить подпапки рекурсивно |
+| `--poll-interval` | Интервал проверки файловой системы (в секундах) |
 
 ---
 
@@ -136,14 +170,6 @@ curl -X POST "http://localhost:8000/api/v1/batch?input_dir=/app/data/input&thres
 - **Автоматическая классификация**: пакетная обработка директории документов (копирование по папкам классов, лог процесса, CSV-отчёт, фильтры и поиск результатов).
 - **Классификация отдельного документа**: загрузка файла (`.txt`, `.docx`, `.pdf`, …) или вставка текста → класс + вероятности/оценки.
 - **Обучение**: обучение модели по папке/CSV/Hugging Face + сохранение `.joblib` и отчётов с прогресс-барами и отображением времени обучения.
-
-### Обучение
-
-Модель обучается на выбранном источнике данных (папка с подпапками-классами, CSV или Hugging Face). Процесс обучения сопровождается:
-- текстовый статус, отображающий текущий этап обработки;
-- итоговый отчёт с метриками и матрицей ошибок;
-- сохранение модели в формате `.joblib` в выбранную директорию;
-- отображение времени обучения в консоли и в UI.
 
 ---
 
@@ -166,26 +192,6 @@ curl -X POST "http://localhost:8000/api/v1/batch?input_dir=/app/data/input&thres
   - иначе файл копируется в папку предсказанного класса;
 - для **SVM** порог вероятности не применяется (показывается `score`, это не probability).
 
-Результаты и фильтры:
-- после обработки выводится итоговая сводка (всего / успешно / требуют проверки / ошибок);
-- отображается **список файлов с фильтрами и поиском**:
-  - фильтры по статусу: Успешные, требуют проверки, Ошибки;
-  - поиск по имени файла, классу или сообщению об ошибке;
-  - по умолчанию показывается весь список, фильтры позволяют выбрать нужные статусы;
-- сохраняется CSV-отчёт: `output/.../batch_classification_report.csv`;
-- доступна визуализация распределения файлов по классам (круговая диаграмма);
-- отображается время выполнения классификации в UI и в логе.
-
-Ручная классификация в UI:
-- если файл оказался в папке `Требует_проверки`, появляется секция ручной классификации ниже отчётов;
-- в ней доступен выбор файла, просмотр текста и выбор класса из всех классов модели;
-- после подтверждения файл копируется в папку выбранного класса и удаляется из папки `Требует_проверки`.
-
-Важно:
-- исходные файлы **не перемещаются и не изменяются**, а **копируются** в выходную директорию;
-- выходная директория **не очищается** автоматически после проведенной классификации;
-- ошибки в классификации отдельных файлов не останавливают общий процесс.
-
 ---
 
 ## Структура проекта
@@ -201,8 +207,8 @@ curl -X POST "http://localhost:8000/api/v1/batch?input_dir=/app/data/input&thres
 | `evaluation/` | Метрики, confusion matrix, отчёт, JSON, PNG |
 | `prediction/` | Предсказание класса и вероятностей |
 | `services/batch_classifier.py` | Сервис пакетной классификации в директории |
+| `services/watch_service.py` | Сервис мониторинга директории для автоматической классификации |
 | `models/` | Сохранённые `.joblib`, метрики, графики (по умолчанию) |
-| `data/corpus_txt/` | Пример корпуса: подпапки = классы |
 | `api/` | REST API модуль |
 | `api/main.py` | Точка входа для API |
 | `api/routes/` | Маршруты API |
@@ -356,6 +362,26 @@ python main.py batch --model models/pipeline_logreg.joblib --input-dir data/tmp 
 
 По результату создаётся CSV-отчёт `batch_classification_report.csv` в указанной выходной директории, а также копии файлов по папкам классов и `Требует_проверки` для результатов с вероятностью классов меньше пороговой.
 
+### Команда `watch` — режим мониторинга директории
+
+Позволяет запускать режим постоянного мониторинга директории для автоматической классификации новых документов.
+
+```bash
+python main.py watch --model models/pipeline_logreg.joblib --input-dir input --output-dir output/classified --review-dir output/manual_review --threshold 20.0
+```
+
+Аргументы:
+
+| Аргумент | Описание |
+|----------|----------|
+| `--model` | Путь к `.joblib` модели для классификации |
+| `--input-dir` | Входная директория для мониторинга новых документов |
+| `--output-dir` | Директория для классифицированных файлов |
+| `--review-dir` | Директория для файлов, требующих ручной проверки |
+| `--threshold` | Порог уверенности для ручной проверки (в процентах, по умолчанию 20) |
+| `--recursive` | Мониторить подпапки рекурсивно |
+| `--poll-interval` | Интервал проверки файловой системы (в секундах, по умолчанию 1.0) |
+
 ---
 
 Поддерживаемые расширения файлов: **`.txt`**, **`.md`**, **`.docx`**, **`.pdf`**, **`.odt`**, **`.rtf`**, **`.html`**, **`.htm`**.
@@ -419,13 +445,14 @@ python main.py run -h
 python main.py train -h
 python main.py compare -h
 python main.py predict -h
+python main.py watch -h
 ```
 
 ---
 
 ## Зависимости (кратко)
 
-См. полный список в **`requirements.txt`**: **numpy**, **pandas**, **scikit-learn**, **joblib**, **matplotlib**, **pymorphy2**, **nltk**, **python-docx**, **pymupdf**, **striprtf**, **easyocr**, **Pillow**, **PyYAML**, **fastapi**, **uvicorn**, **python-multipart**, опционально **datasets**.
+См. полный список в **`requirements.txt`**: **numpy**, **pandas**, **scikit-learn**, **joblib**, **matplotlib**, **pymorphy2**, **nltk**, **python-docx**, **pymupdf**, **striprtf**, **easyocr**, **Pillow**, **PyYAML**, **fastapi**, **uvicorn**, **python-multipart**, **watchdog**, опционально **datasets**.
 
 ---
 
