@@ -31,3 +31,15 @@ class ErrorResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = Field(..., example="OK")
+
+
+class ModelInfoResponse(BaseModel):
+    """
+    Схема ответа для информации о модели классификации.
+    
+    Attributes:
+        model (str): Имя/идентификатор используемой модели.
+        classes (list): Список известных классов, которые может определять модель.
+    """
+    model: str
+    classes: list

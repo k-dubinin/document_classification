@@ -64,7 +64,7 @@ def collect_batch_results(model_path: str, input_dir: str, output_dir: str, thre
 @router.post("/batch", response_model=BatchResponse)
 async def batch_classify(
     request: Request,
-    zip_file: UploadFile = File(None), 
+    zip_file: UploadFile = File(None),
     threshold: float = Query(20.0, description="Порог вероятности для ручной проверки"),
     input_dir: str = Query(None, description="Входная директория с документами (вместо ZIP-архива)")
 ):
@@ -75,7 +75,7 @@ async def batch_classify(
     temp_dir = Path(tempfile.gettempdir()) / f"temp_batch_{uuid.uuid4()}"
     input_dir_path = temp_dir / "input"
     output_dir = temp_dir / "output"
-    
+
     input_dir_path.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -145,4 +145,4 @@ async def batch_classify(
             if temp_dir.exists():
                 shutil.rmtree(temp_dir)
         except:
-            pass  # Игнорируем ошибки при удалении временных файлов
+            pass

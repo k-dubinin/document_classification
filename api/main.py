@@ -50,11 +50,22 @@ async def lifespan(app: FastAPI):
             return
 
     try:
-        app.state.pipeline, app.state.preprocessor = joblib.load(model_path)
+        loaded_obj = joblib.load(model_path)
+        # Проверяем структуру загруженного объекта
+        if isinstance(loaded_obj, dict):
+
+            app.state.pipeline = loaded_obj.get('pipeline')
+            app.state.preprocessor = loaded_obj.get('preprocessor')
+        elif isinstance(loaded_obj, tuple) and len(loaded_obj) >= 2:
+
+            app.state.pipeline, app.state.preprocessor = loaded_obj
+        else:
+            raise ValueError(f"Неизвестная структура модели: {type(loaded_obj)}")
+
         app.state.model_path = model_path  # Сохраняем путь к модели для использования в predict_with_details
-        print(f"Модель загружена из: {model_path}")
+        pass
     except Exception as e:
-        print(f"Ошибка загрузки модели: {e}")
+        # Обработка ошибки загрузки модели
         yield
         return
 
@@ -86,10 +97,11 @@ app.add_middleware(
 )
 
 # Импортируем маршруты после определения app
-from api.routes import classify, batch, health
+from api.routes import classify, batch, health, model
 
 # Подключаем маршруты
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
+app.include_router(model.router, prefix="/api/v1", tags=["model"])
 app.include_router(classify.router, prefix="/api/v1", tags=["classification"])
 app.include_router(batch.router, prefix="/api/v1", tags=["batch"])
 

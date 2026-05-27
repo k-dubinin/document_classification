@@ -2,7 +2,7 @@
 Маршруты для классификации документов
 """
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import tempfile
 import os
 from pathlib import Path
@@ -14,7 +14,7 @@ from api.schemas.responses import ClassificationResponse, ErrorResponse
 
 
 class TextRequest(BaseModel):
-    text: str
+    text: str = Field(..., example="Пример текста документа для классификации")
 
 
 router = APIRouter()
