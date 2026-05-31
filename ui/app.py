@@ -36,6 +36,7 @@ from services.batch_classifier import (
     iter_document_paths,
     write_batch_report_csv,
 )
+from services.watch_service import WatchService
 from training import config
 from training.persistence import load_model_bundle, save_model_bundle
 from training.train import (
@@ -156,8 +157,8 @@ st.set_page_config(
 st.title("Система автоматической классификации документов")
 st.caption("Локально: извлечение текста → предобработка → TF‑IDF → классификатор (sklearn)")
 
-tab_auto, tab_predict, tab_train, tab_about = st.tabs(
-    ["Автоматическая классификация", "Классификация отдельного документа", "Обучение", "О системе"]
+tab_auto, tab_predict, tab_train, tab_about, tab_watch = st.tabs(
+    ["Автоматическая классификация", "Классификация отдельного документа", "Обучение", "О системе", "Мониторинг"]
 )
 if "batch_result" not in st.session_state:
     st.session_state.batch_result = None
@@ -810,6 +811,131 @@ with tab_train:
                 _render_metrics_files(out_dir)
                 progress.empty()
                 status_text.empty()
+
+
+with tab_watch:
+    st.subheader("Мониторинг новых документов")
+    st.markdown(
+        "Автоматическое отслеживание входной директории и классификация новых файлов. "
+        "Если уверенность ниже порога, файл будет перемещён в папку ручной проверки."
+    )
+
+    if "watch_service" not in st.session_state:
+        st.session_state.watch_service = None
+    if "watch_status" not in st.session_state:
+        st.session_state.watch_status = "Остановлен"
+    if "watch_log" not in st.session_state:
+        st.session_state.watch_log = []
+
+    col1, col2 = st.columns(2)
+    with col1:
+        models_dir = _models_dir()
+        model_files = _list_model_files(models_dir)
+        display_map = {_display_name_for_model_file(p): str(p) for p in model_files}
+        manual_key = "Указать свой путь…"
+        keys = list(display_map.keys()) + [manual_key]
+
+        default_key = None
+        for k, v in display_map.items():
+            if Path(v).name == config.FILENAME_VECTORIZER_MODEL_LR:
+                default_key = k
+                break
+        idx = keys.index(default_key) if default_key in keys else 0
+
+        chosen = st.selectbox("Модель (.joblib)", keys, index=idx, key="watch_model")
+        if chosen == manual_key:
+            watch_model_path = st.text_input(
+                "Путь к обученной модели (.joblib)",
+                value=str(Path(models_dir) / config.FILENAME_VECTORIZER_MODEL_LR),
+                key="watch_model_manual",
+            )
+        else:
+            watch_model_path = display_map.get(chosen)
+
+        watch_input_dir = st.text_input(
+            "Входная директория",
+            value=str(PROJECT_ROOT / "data" / "tmp"),
+            key="watch_input_dir",
+        )
+        watch_output_dir = st.text_input(
+            "Выходная директория",
+            value=str(PROJECT_ROOT / "output" / "classified_documents" / "watch"),
+            key="watch_output_dir",
+        )
+        watch_review_dir = st.text_input(
+            "Директория для ручной проверки",
+            value=str(PROJECT_ROOT / "output" / "classified_documents" / "review"),
+            key="watch_review_dir",
+        )
+
+    with col2:
+        watch_threshold = st.number_input(
+            "Порог ручной проверки по вероятности (%)",
+            min_value=1,
+            max_value=60,
+            value=20,
+            step=1,
+            key="watch_threshold",
+        )
+        watch_recursive = st.checkbox(
+            "Искать файлы в подпапках (рекурсивно)",
+            value=True,
+            key="watch_recursive",
+        )
+        st.markdown(
+            "- При появлении нового файла система попытается извлечь текст и классифицировать его.\n"
+            "- Успешные документы перемещаются в папку класса.\n"
+            "- Файлы с низкой уверенностью перемещаются в папку ручной проверки."
+        )
+
+    if st.button("Запустить мониторинг", type="primary", key="watch_start"):
+        if not watch_model_path or not str(watch_model_path).strip():
+            st.error("Укажите путь к модели (.joblib).")
+        elif not Path(watch_model_path).is_file():
+            st.error("Файл модели не найден.")
+        elif not watch_input_dir or not Path(watch_input_dir).is_dir():
+            st.error("Входная директория не найдена.")
+        else:
+            service = st.session_state.watch_service
+            if service and service.is_running():
+                st.info("Мониторинг уже запущен.")
+            else:
+                try:
+                    service = WatchService(
+                        model_path=str(watch_model_path),
+                        input_dir=str(watch_input_dir),
+                        output_dir=str(watch_output_dir),
+                        review_dir=str(watch_review_dir),
+                        confidence_threshold=float(watch_threshold),
+                        recursive=watch_recursive,
+                    )
+                    service.start()
+                    st.session_state.watch_service = service
+                    st.session_state.watch_status = "Запущен"
+                    st.session_state.watch_log.append("Мониторинг запущен.")
+                    st.success("Сервис мониторинга запущен.")
+                except Exception as e:
+                    st.error(f"Не удалось запустить мониторинг: {e}")
+
+    if st.button("Остановить мониторинг", type="secondary", key="watch_stop"):
+        service = st.session_state.watch_service
+        if service and service.is_running():
+            service.stop()
+            st.session_state.watch_status = "Остановлен"
+            st.session_state.watch_log.append("Мониторинг остановлен.")
+            st.success("Сервис мониторинга остановлен.")
+        else:
+            st.warning("Сервис мониторинга не запущен.")
+
+    st.info(f"Статус мониторинга: {st.session_state.watch_status}")
+    st.write(f"Входная директория: {watch_input_dir}")
+    st.write(f"Папка результатов: {watch_output_dir}")
+    st.write(f"Папка проверки: {watch_review_dir}")
+
+    if st.session_state.watch_log:
+        with st.expander("Журнал мониторинга", expanded=True):
+            for line in st.session_state.watch_log[-20:]:
+                st.write(f"- {line}")
 
 
 with tab_about:

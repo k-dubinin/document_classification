@@ -13,7 +13,6 @@ from watchdog.events import FileSystemEventHandler
 
 from prediction.predictor import predict_with_details
 from data.document_text import read_text_from_document
-from services.batch_classifier import move_file_to_class_dir
 
 
 class DocumentWatchHandler(FileSystemEventHandler):
