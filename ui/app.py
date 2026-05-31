@@ -113,8 +113,8 @@ def _render_metrics_files(out_dir: str) -> None:
             col1, col2, col3 = st.columns([1, 8, 1])  # Центрируем изображение
             with col2:
                 st.image(
-                    str(p), 
-                    caption=f"Матрица ошибок: {p.name}", 
+                    str(p),
+                    caption=f"Матрица ошибок: {p.name}",
                     use_container_width=True  # Используем новый параметр вместо устаревшего use_column_width
                 )
 
@@ -235,14 +235,14 @@ with tab_auto:
 
     # Кнопка будет активна только если классификация не выполняется
     clicked = st.button(
-        "Запустить автоматическую классификацию", 
-        type="primary", 
+        "Запустить автоматическую классификацию",
+        type="primary",
         disabled=st.session_state.classification_in_progress
     )
-    
+
     progress_placeholder = st.empty()
     stats_box = st.empty()
-    
+
     if clicked:
         if not auto_model_path or not str(auto_model_path).strip():
             st.error("Укажите путь к модели (.joblib).")
@@ -254,7 +254,7 @@ with tab_auto:
             # Перерисовываем интерфейс с обновленным состоянием
             st.rerun()
     elif st.session_state.classification_in_progress:
-        # Если кнопка не была нажата, но состояние "в процессе", 
+        # Если кнопка не была нажата, но состояние "в процессе",
         # значит, классификация уже выполняется
         if not auto_model_path or not str(auto_model_path).strip():
             st.error("Укажите путь к модели (.joblib).")
@@ -265,7 +265,7 @@ with tab_auto:
         else:
             import time
             start_time = time.time()
-            
+
             total = len(files_preview)
             progress = progress_placeholder.progress(0)
             timer_text = progress_placeholder.empty()
@@ -339,11 +339,11 @@ with tab_auto:
                 # Обновление времени выполнения
                 elapsed_time = time.time() - start_time
                 timer_text.text(f"Время выполнения: {elapsed_time:.1f} секунд")
-                
+
                 # UI обновления
                 if total > 0:
                     progress.progress(min(1.0, processed / total))
-                    
+
                 # Обновление статистики с отображением времени
                 stats_box.info(
                     f"Обработано: {processed}/{total if total else processed} | "
@@ -377,7 +377,7 @@ with tab_auto:
                 "processed_items": processed_items,
                 "elapsed_time": final_elapsed_time,
             }
-            
+
             # Сброс состояния выполнения сразу после завершения основной классификации
             st.session_state.classification_in_progress = False
             # Принудительное обновление UI для отображения изменений
@@ -488,12 +488,12 @@ with tab_auto:
                 MEDICAL_SHORT_LABELS,
                 DEFAULT_SHORT_LABELS
             )
-            
+
             # Проверяем, какие сокращения использовать, на основе ключей
             # Если есть совпадения с ключами государственного управления, используем их
             class_keys = list(class_counts.keys())
             gov_matches = [key for key in class_keys if key in GOVERNMENT_MANAGEMENT_SHORT_LABELS]
-            
+
             if len(gov_matches) > len(class_keys) // 2:  # Если больше половины совпадений
                 active_short_labels = GOVERNMENT_MANAGEMENT_SHORT_LABELS
             else:
@@ -504,10 +504,10 @@ with tab_auto:
                 else:
                     # Используем сокращения по умолчанию
                     active_short_labels = DEFAULT_SHORT_LABELS
-            
+
             # Преобразование названий классов в короткие формы
             short_names = [active_short_labels.get(name, name) for name in class_keys]
-            
+
             fig = px.pie(
                 names=short_names,  # Используем короткие названия
                 values=list(class_counts.values()),
@@ -740,7 +740,7 @@ with tab_train:
             try:
                 import time
                 start_time = time.time()  # Запоминаем время начала
-                
+
                 status_text.text("Загрузка и подготовка данных...")
                 progress.progress(0.2)
                 if train_params["kind"] == "dir":
@@ -770,10 +770,10 @@ with tab_train:
                 # Оценка + артефакты
                 status_text.text("Оценка и сохранение...")
                 progress.progress(0.8)
-                
+
                 # Вычисляем время обучения до вызова evaluate_and_report
                 training_time = time.time() - start_time
-                
+
                 title_map = {"logreg": "Logistic Regression", "nb": "Naive Bayes", "svm": "Linear SVM"}
                 payload = evaluate_and_report(
                     pipeline,
@@ -795,7 +795,7 @@ with tab_train:
                 save_model_bundle(pipeline, preprocessor, model_file)
 
                 progress.progress(1.0)
-                
+
                 # Вычисляем время обучения
                 elapsed_time = time.time() - start_time
                 status_text.text(f"Готово! Обучение заняло {elapsed_time:.2f} секунд")
