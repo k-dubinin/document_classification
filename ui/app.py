@@ -21,6 +21,7 @@ import joblib
 import os
 import shutil
 from collections import Counter
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -90,6 +91,23 @@ def _read_text_upload(tmp_dir: Path, uploaded) -> str:
     return read_text_from_document(str(dst))
 
 
+def _format_watch_log_entry(entry: Any) -> tuple[str, str]:
+    if isinstance(entry, dict):
+        return entry.get("message", ""), entry.get("timestamp", "")
+    return str(entry), ""
+
+
+def _append_watch_log(message: str) -> None:
+    if "watch_log" not in st.session_state:
+        st.session_state.watch_log = []
+    st.session_state.watch_log.append(
+        {
+            "message": message,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        }
+    )
+
+
 def _render_metrics_files(out_dir: str) -> None:
     out = Path(out_dir)
     json_files = sorted(out.glob("*_metrics.json"))
@@ -157,8 +175,8 @@ st.set_page_config(
 st.title("Система автоматической классификации документов")
 st.caption("Локально: извлечение текста → предобработка → TF‑IDF → классификатор (sklearn)")
 
-tab_auto, tab_predict, tab_train, tab_about, tab_watch = st.tabs(
-    ["Автоматическая классификация", "Классификация отдельного документа", "Обучение", "О системе", "Мониторинг"]
+tab_auto, tab_predict, tab_watch, tab_train, tab_about = st.tabs(
+    ["Автоматическая классификация", "Классификация отдельного документа", "Мониторинг", "Обучение", "О системе"]
 )
 if "batch_result" not in st.session_state:
     st.session_state.batch_result = None
@@ -826,6 +844,10 @@ with tab_watch:
         st.session_state.watch_status = "Остановлен"
     if "watch_log" not in st.session_state:
         st.session_state.watch_log = []
+    if "watch_flash_message" not in st.session_state:
+        st.session_state.watch_flash_message = ""
+    if "watch_flash_type" not in st.session_state:
+        st.session_state.watch_flash_type = "info"
 
     col1, col2 = st.columns(2)
     with col1:
@@ -884,7 +906,7 @@ with tab_watch:
         )
         st.markdown(
             "- При появлении нового файла система попытается извлечь текст и классифицировать его.\n"
-            "- Успешные документы перемещаются в папку класса.\n"
+            "- Успешно классифицированные документы перемещаются в папку класса.\n"
             "- Файлы с низкой уверенностью перемещаются в папку ручной проверки."
         )
 
@@ -898,7 +920,8 @@ with tab_watch:
         else:
             service = st.session_state.watch_service
             if service and service.is_running():
-                st.info("Мониторинг уже запущен.")
+                st.session_state.watch_flash_message = "Мониторинг уже запущен."
+                st.session_state.watch_flash_type = "info"
             else:
                 try:
                     service = WatchService(
@@ -912,8 +935,9 @@ with tab_watch:
                     service.start()
                     st.session_state.watch_service = service
                     st.session_state.watch_status = "Запущен"
-                    st.session_state.watch_log.append("Мониторинг запущен.")
-                    st.success("Сервис мониторинга запущен.")
+                    _append_watch_log("Мониторинг запущен.")
+                    st.session_state.watch_flash_message = "Мониторинг запущен."
+                    st.session_state.watch_flash_type = "success"
                 except Exception as e:
                     st.error(f"Не удалось запустить мониторинг: {e}")
 
@@ -922,20 +946,38 @@ with tab_watch:
         if service and service.is_running():
             service.stop()
             st.session_state.watch_status = "Остановлен"
-            st.session_state.watch_log.append("Мониторинг остановлен.")
-            st.success("Сервис мониторинга остановлен.")
+            _append_watch_log("Мониторинг остановлен.")
+            st.session_state.watch_flash_message = "Мониторинг остановлен."
+            st.session_state.watch_flash_type = "success"
         else:
-            st.warning("Сервис мониторинга не запущен.")
+            st.session_state.watch_flash_message = "Сервис мониторинга не запущен."
+            st.session_state.watch_flash_type = "warning"
 
-    st.info(f"Статус мониторинга: {st.session_state.watch_status}")
-    st.write(f"Входная директория: {watch_input_dir}")
-    st.write(f"Папка результатов: {watch_output_dir}")
-    st.write(f"Папка проверки: {watch_review_dir}")
+    flash_placeholder = st.empty()
+    if st.session_state.watch_flash_message:
+        if st.session_state.watch_flash_type == "success":
+            flash_placeholder.success(st.session_state.watch_flash_message)
+        elif st.session_state.watch_flash_type == "warning":
+            flash_placeholder.warning(st.session_state.watch_flash_message)
+        else:
+            flash_placeholder.info(st.session_state.watch_flash_message)
+        st.session_state.watch_flash_message = ""
+        st.session_state.watch_flash_type = "info"
+
+    st.info(
+        "**Статус мониторинга:** " + st.session_state.watch_status + "  \n"
+        "**Входная директория:** " + watch_input_dir + "  \n"
+        "**Папка результатов:** " + watch_output_dir + "  \n"
+        "**Папка проверки:** " + watch_review_dir
+    )
 
     if st.session_state.watch_log:
         with st.expander("Журнал мониторинга", expanded=True):
-            for line in st.session_state.watch_log[-20:]:
-                st.write(f"- {line}")
+            for entry in st.session_state.watch_log[-20:]:
+                message, timestamp = _format_watch_log_entry(entry)
+                line_cols = st.columns([7, 3])
+                line_cols[0].markdown(f"- {message}")
+                line_cols[1].caption(timestamp)
 
 
 with tab_about:
@@ -945,5 +987,6 @@ with tab_about:
         "- Все артефакты (модель, метрики, confusion matrix) сохраняются в `models/` (или выбранную директорию). \n"
         "- **Классификация**: выберите `.joblib` и загрузите документ — система выдаст класс и вероятности (если модель поддерживает).\n"
         "- **Автоматическая классификация**: пакетная обработка директории. Выберите обученную модель, укажите входную папку с документами, выходную папку для результатов. Документы будут скопированы в подпапки по предсказанным классам. Используется порог вероятности для выявления файлов, требующих ручной проверки (применяется только для моделей, поддерживающих вероятности). Поддерживаются форматы: `.txt`, `.md`, `.docx`, `.pdf`, `.odt`, `.rtf`, `.html`.  По итогу классификации формируется CSV-отчёт.\n"
+        "- **Мониторинг**: отслеживает новые файлы во входной директории и автоматически классифицирует их. Файлы с низкой уверенностью перемещаются в папку ручной проверки, а остальные — в папки по классам.\n"
 
     )
