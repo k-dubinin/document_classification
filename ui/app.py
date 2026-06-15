@@ -20,10 +20,16 @@ import json
 import joblib
 import os
 import shutil
+import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+
+ROOT_PATH = Path(__file__).resolve().parent.parent
+if str(ROOT_PATH) not in sys.path:
+    sys.path.insert(0, str(ROOT_PATH))
 
 import plotly.express as px
 import streamlit as st
