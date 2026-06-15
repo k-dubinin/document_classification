@@ -79,6 +79,22 @@ docker compose up
 - `POST /api/v1/watch/stop` - остановка режима мониторинга директории
 - `GET /api/v1/watch/status` - статус режима мониторинга директории
 
+### Запуск REST API локально
+
+Запуск API из корня проекта:
+
+```bash
+python api/main.py
+```
+
+Или через uvicorn напрямую:
+
+```bash
+uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+API будет доступен по адресу: http://localhost:8000
+
 ### Примеры запросов
 
 Проверка работоспособности:
